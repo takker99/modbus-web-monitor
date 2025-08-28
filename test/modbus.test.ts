@@ -277,3 +277,28 @@ describe('Property based FC16 request CRC + structure', () => {
     )
   })
 })
+
+describe('Performance parsing burst', () => {
+  it('parses 1000 small FC03 frames under 200ms', async () => {
+    const client = new ModbusClient()
+    const frames: number[] = []
+    for (let i = 0; i < 1000; i++) {
+      const base = [1,3,2,0,(i & 0xff)]
+      const crc = calculateCRC16(base)
+      base.push(crc & 0xff, (crc >> 8) & 0xff)
+      frames.push(...base)
+    }
+    const start = performance.now()
+    // Issue reads sequentially consuming frames already buffered
+    for (let i = 0; i < 1000; i++) {
+      const p = client.read({ slaveId:1, functionCode:3, startAddress:0, quantity:1 })
+      if (i === 0) {
+        client.handleResponse(new Uint8Array(frames))
+      }
+      const r = await p
+      expect(r.data.length).toBe(1)
+    }
+    const elapsed = performance.now() - start
+    expect(elapsed).toBeLessThan(200)
+  }, 10000)
+})
