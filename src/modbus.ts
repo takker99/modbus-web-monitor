@@ -5,8 +5,8 @@ import type {
   ModbusWriteConfig,
 } from './types.ts'
 
-// CRC16 Modbus calculation function
-function calculateCRC16(data: number[]): number {
+// CRC16 Modbus calculation function (exported for tests)
+export function calculateCRC16(data: number[]): number {
   let crc = 0xffff
   for (const byte of data) {
     crc ^= byte
@@ -65,6 +65,15 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
       }
 
       this.emit('request', request)
+
+      // 既にバッファ内に対象スレーブのレスポンスが残っている（連結フレーム等）場合の即時再解析
+      if (this.buffer.length > 0) {
+        if (this.protocol === 'rtu') {
+          this.handleRTUResponse()
+        } else {
+          this.handleASCIIResponse()
+        }
+      }
     })
   }
 
@@ -132,15 +141,30 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     if (
       !this.pendingRequest ||
       this.pendingRequest.slaveId !== slaveId ||
-      this.pendingRequest.functionCode !== functionCode
+      // 許可: 通常関数コード または 例外フレーム(function | 0x80)
+      !(
+        this.pendingRequest.functionCode === functionCode ||
+        (functionCode & 0x80 &&
+          (functionCode & 0x7f) === this.pendingRequest.functionCode)
+      )
     ) {
       return
     }
 
-    // Error response check
+    // Error response check (exception frame length = 5 bytes: slave + fc + ex + CRC2)
     if (functionCode & 0x80) {
+      if (this.buffer.length < 5) return
+      const messageWithoutCRC = this.buffer.slice(0, 3)
+      const receivedCRC = (this.buffer[4] << 8) | this.buffer[3]
+      const calculatedCRC = calculateCRC16(messageWithoutCRC)
+      if (receivedCRC !== calculatedCRC) {
+        this.handleError(new Error('CRC error'))
+        return
+      }
       const errorCode = this.buffer[2]
       this.handleError(errorCode)
+      // 例外フレーム消費
+      this.buffer = this.buffer.slice(5)
       return
     }
 
