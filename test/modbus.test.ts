@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
 import fc from 'fast-check'
+import { describe, expect, it, vi } from 'vitest'
 import { calculateCRC16, ModbusClient } from '../src/modbus.ts'
 
 // Helper to build a full RTU frame for read holding registers (FC03)
@@ -44,9 +44,14 @@ describe('Request frame building (read)', () => {
 describe('Write single (FC05/06)', () => {
   it('builds and parses FC05 single coil write echo', async () => {
     const client = new ModbusClient()
-    const promise = client.write({ slaveId: 1, functionCode: 5, address: 0x0013, value: 1 })
+    const promise = client.write({
+      address: 0x0013,
+      functionCode: 5,
+      slaveId: 1,
+      value: 1,
+    })
     // Echo response: slave, fc, addr hi, addr lo, value hi, value lo
-    const frame = [1,5,0x00,0x13,0xFF,0x00]
+    const frame = [1, 5, 0x00, 0x13, 0xff, 0x00]
     const crc = calculateCRC16(frame)
     frame.push(crc & 0xff, (crc >> 8) & 0xff)
     client.handleResponse(new Uint8Array(frame))
@@ -55,8 +60,13 @@ describe('Write single (FC05/06)', () => {
 
   it('builds and parses FC06 single register write echo', async () => {
     const client = new ModbusClient()
-    const promise = client.write({ slaveId: 2, functionCode: 6, address: 0x0001, value: 0x0A0B })
-    const frame = [2,6,0x00,0x01,0x0A,0x0B]
+    const promise = client.write({
+      address: 0x0001,
+      functionCode: 6,
+      slaveId: 2,
+      value: 0x0a0b,
+    })
+    const frame = [2, 6, 0x00, 0x01, 0x0a, 0x0b]
     const crc = calculateCRC16(frame)
     frame.push(crc & 0xff, (crc >> 8) & 0xff)
     client.handleResponse(new Uint8Array(frame))
@@ -67,14 +77,19 @@ describe('Write single (FC05/06)', () => {
 describe('Write multiple (FC15/16)', () => {
   it('builds FC15 frame and parses echo', async () => {
     const client = new ModbusClient()
-    const values = [1,0,1,1,0,0,1,0,1] // 9 coils => 2 bytes
-    const promise = client.write({ slaveId: 3, functionCode: 15, address: 0x0005, value: values })
+    const values = [1, 0, 1, 1, 0, 0, 1, 0, 1] // 9 coils => 2 bytes
+    const promise = client.write({
+      address: 0x0005,
+      functionCode: 15,
+      slaveId: 3,
+      value: values,
+    })
     // Expected packed bytes: first 8 bits = 1,0,1,1,0,0,1,0 -> 0b01001101 = 0x4D (LSB first per coil order)
     // second byte for 9th bit -> bit0 = 1
     const packed1 = 0b01001101
     const packed2 = 0b00000001
     // Device echo response (no data bytes): slave, fc, addr hi, addr lo, qty hi, qty lo
-    const frame = [3,15,0x00,0x05,0x00,values.length]
+    const frame = [3, 15, 0x00, 0x05, 0x00, values.length]
     const crc = calculateCRC16(frame)
     frame.push(crc & 0xff, (crc >> 8) & 0xff)
     // Ensure our internal request packing matches expectation
@@ -82,16 +97,21 @@ describe('Write multiple (FC15/16)', () => {
     client.handleResponse(new Uint8Array(frame))
     await expect(promise).resolves.toBeUndefined()
     // Indirectly, packing logic already used; to assert bytes we'd rebuild via private method – skipped.
-    expect(packed1).toBe(0x4D)
+    expect(packed1).toBe(0x4d)
     expect(packed2).toBe(0x01)
   })
 
   it('builds FC16 frame and parses echo', async () => {
     const client = new ModbusClient()
-    const regs = [0x1234, 0xABCD, 0x0001]
-    const promise = client.write({ slaveId: 4, functionCode: 16, address: 0x0100, value: regs })
+    const regs = [0x1234, 0xabcd, 0x0001]
+    const promise = client.write({
+      address: 0x0100,
+      functionCode: 16,
+      slaveId: 4,
+      value: regs,
+    })
     // Echo response: slave, fc, addr hi, addr lo, qty hi, qty lo
-    const frame = [4,16,0x01,0x00,0x00,regs.length]
+    const frame = [4, 16, 0x01, 0x00, 0x00, regs.length]
     const crc = calculateCRC16(frame)
     frame.push(crc & 0xff, (crc >> 8) & 0xff)
     client.handleResponse(new Uint8Array(frame))
@@ -246,10 +266,13 @@ describe('Property based FC16 request CRC + structure', () => {
   it('generates correct length and CRC for random register arrays', () => {
     fc.assert(
       fc.property(
-        fc.array(fc.integer({ min: 0, max: 0xffff }), { minLength: 1, maxLength: 10 }),
-        fc.integer({ min: 0, max: 0xff }),
-        fc.integer({ min: 0, max: 0xffff }),
-  (regs, slaveId, address) => {
+        fc.array(fc.integer({ max: 0xffff, min: 0 }), {
+          maxLength: 10,
+          minLength: 1,
+        }),
+        fc.integer({ max: 0xff, min: 0 }),
+        fc.integer({ max: 0xffff, min: 0 }),
+        (regs, slaveId, address) => {
           const quantity = regs.length
           const byteCount = quantity * 2
           const base = [
@@ -265,12 +288,10 @@ describe('Property based FC16 request CRC + structure', () => {
           const crc = calculateCRC16(base)
           const frame = [...base, crc & 0xff, (crc >> 8) & 0xff]
           const crc2 = calculateCRC16(frame.slice(0, -2))
-          return (
-            frame.length === 9 + byteCount &&
+          return (frame.length === 9 + byteCount &&
             crc === crc2 &&
             frame[frame.length - 2] === (crc & 0xff) &&
-            frame[frame.length - 1] === ((crc >> 8) & 0xff)
-          ) as boolean
+            frame[frame.length - 1] === ((crc >> 8) & 0xff)) as boolean
         }
       ),
       { numRuns: 50 }
@@ -283,7 +304,7 @@ describe('Performance parsing burst', () => {
     const client = new ModbusClient()
     const frames: number[] = []
     for (let i = 0; i < 1000; i++) {
-      const base = [1,3,2,0,(i & 0xff)]
+      const base = [1, 3, 2, 0, i & 0xff]
       const crc = calculateCRC16(base)
       base.push(crc & 0xff, (crc >> 8) & 0xff)
       frames.push(...base)
@@ -291,7 +312,12 @@ describe('Performance parsing burst', () => {
     const start = performance.now()
     // Issue reads sequentially consuming frames already buffered
     for (let i = 0; i < 1000; i++) {
-      const p = client.read({ slaveId:1, functionCode:3, startAddress:0, quantity:1 })
+      const p = client.read({
+        functionCode: 3,
+        quantity: 1,
+        slaveId: 1,
+        startAddress: 0,
+      })
       if (i === 0) {
         client.handleResponse(new Uint8Array(frames))
       }
