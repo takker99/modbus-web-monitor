@@ -1,0 +1,442 @@
+/* リセットとベーススタイル */
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+  background-color: #f5f5f5;
+}
+
+.container {
+  max-width: 1400px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background-color: white;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+}
+
+/* ヘッダー */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  color: white;
+  background: linear-gradient(135deg, #2c3e50, #3498db);
+}
+
+.header h1 {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.connection-status {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.status-connected {
+  font-weight: bold;
+  color: #2ecc71;
+}
+
+.status-disconnected {
+  font-weight: bold;
+  color: #e74c3c;
+}
+
+/* メインコンテンツ */
+.main-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  padding: 20px;
+}
+
+/* パネル共通スタイル */
+.panel {
+  padding: 20px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.panel h2 {
+  padding-bottom: 8px;
+  margin-bottom: 15px;
+  font-size: 18px;
+  color: #2c3e50;
+  border-bottom: 2px solid #3498db;
+}
+
+/* フォーム要素 */
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.form-group {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 120px;
+}
+
+.form-group label {
+  margin-bottom: 5px;
+  font-weight: 500;
+  color: #555;
+}
+
+.form-group input,
+.form-group select {
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  transition: border-color 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+/* ボタンスタイル */
+.btn {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn-primary {
+  color: white;
+  background: #3498db;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+.btn-success {
+  color: white;
+  background: #2ecc71;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #27ae60;
+}
+
+.btn-danger {
+  color: white;
+  background: #e74c3c;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #c0392b;
+}
+
+.btn-warning {
+  color: white;
+  background: #f39c12;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background: #e67e22;
+}
+
+.btn-secondary {
+  color: white;
+  background: #95a5a6;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #7f8c8d;
+}
+
+/* ポートコントロール */
+.port-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* データ表示パネル */
+.data-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.data-controls label {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.data-display {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  min-height: 400px;
+}
+
+/* データテーブル */
+.data-table-container {
+  max-height: 400px;
+  overflow: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-weight: 600;
+  color: #555;
+  background: #f8f9fa;
+}
+
+.data-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+/* ログ表示 */
+.log-container h3 {
+  margin-bottom: 10px;
+  font-size: 16px;
+  color: #2c3e50;
+}
+
+.log-display {
+  height: 350px;
+  padding: 10px;
+  overflow-y: auto;
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  user-select: text; /* テキスト選択を可能にする */
+  background: #fafafa;
+  border: 1px solid #ddd;
+  border-radius: 4px; /* テキスト選択を可能にする */
+}
+
+.log-entry {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 5px;
+  font-family: monospace;
+  user-select: text;
+  border-bottom: 1px solid #eee;
+}
+
+.log-entry:hover {
+  background-color: #f8f9fa;
+}
+
+.log-copy-btn {
+  padding: 2px 5px;
+  margin-left: auto;
+  font-size: 14px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.log-entry:hover .log-copy-btn {
+  opacity: 1;
+}
+
+.log-copy-btn:hover {
+  background-color: #e9ecef;
+}
+
+.log-time {
+  min-width: 80px;
+  color: #666;
+  user-select: text;
+}
+
+.log-direction {
+  min-width: 60px;
+  font-weight: bold;
+  user-select: text;
+}
+
+.log-sent .log-direction {
+  color: #e74c3c;
+}
+
+.log-received .log-direction {
+  color: #27ae60;
+}
+
+.log-error .log-direction {
+  color: #f39c12;
+}
+
+.log-info .log-direction {
+  color: #007bff;
+}
+
+.log-data {
+  flex: 1;
+  font-family: "Courier New", monospace;
+  word-break: break-all;
+  user-select: text;
+}
+
+/* レスポンシブデザイン */
+@media (max-width: 1200px) {
+  .data-display {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    margin: 0;
+    box-shadow: none;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .main-content {
+    gap: 15px;
+    padding: 15px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .port-controls {
+    flex-direction: column;
+  }
+
+  .data-controls {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .panel {
+    padding: 15px;
+  }
+
+  .header {
+    padding: 15px;
+  }
+
+  .header h1 {
+    font-size: 20px;
+  }
+
+  .main-content {
+    padding: 10px;
+  }
+}
+
+/* スクロールバーのスタイリング（Webkit系ブラウザ） */
+.log-display::-webkit-scrollbar,
+.data-table-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.log-display::-webkit-scrollbar-track,
+.data-table-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.log-display::-webkit-scrollbar-thumb,
+.data-table-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.log-display::-webkit-scrollbar-thumb:hover,
+.data-table-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* アニメーション */
+.panel {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* フォーカス表示の改善 */
+.form-group input:focus,
+.form-group select:focus,
+.btn:focus {
+  outline: 2px solid #3498db;
+  outline-offset: 2px;
+}
+
+/* 選択不可テキスト */
+.log-entry,
+.data-table th {
+  user-select: none;
+}

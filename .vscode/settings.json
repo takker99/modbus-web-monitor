@@ -1,0 +1,28 @@
+{
+  "[html]": {
+    "editor.defaultFormatter": "vscode.html-language-features"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[typescript][typescriptreact][javascript][javascriptreact][markdown][json]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "chat.tools.terminal.autoApprove": {
+    "cd": true,
+    "npm run check": true,
+    "npm run fix": true,
+    "pnpm check": true,
+    "pnpm fix": true
+  },
+  "editor.codeActionsOnSave": {
+    "source.addMissingImports.ts": "always",
+    "source.fixAll.biome": "always",
+    "source.fixAll.ts": "always",
+    "source.organizeImports.biome": "always",
+    "source.organizeLinkDefinitions": "always",
+    "source.sort.json": "always",
+    "source.sortImports": "always"
+  },
+  "typescript.tsdk": "node_modules/typescript/lib"
+}
