@@ -358,59 +358,67 @@ describe('Modbus ASCII', () => {
     it('builds ASCII read request with proper format', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       let requestData: Uint8Array | null = null
       client.on('request', (data) => {
         requestData = data
       })
-      
+
       const promise = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       expect(requestData).not.toBeNull()
       const requestString = String.fromCharCode(...requestData!)
-      
+
       // Should be :AABBCCDDDDDDLR\r\n format
       // Expected: :010300000001FB\r\n
       // slave=01, func=03, start=0000, qty=0001, LRC=FB
       expect(requestString).toMatch(/^:[0-9A-F]+\r\n$/)
       expect(requestString).toBe(':010300000001FB\r\n')
-      
+
       // Clean up pending request
-      client.handleResponse(new Uint8Array(Array.from(':010302000AF0\r\n').map(c => c.charCodeAt(0))))
+      client.handleResponse(
+        new Uint8Array(
+          Array.from(':010302000AF0\r\n').map((c) => c.charCodeAt(0))
+        )
+      )
       await promise
     })
 
     it('builds ASCII write request with proper format', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       let requestData: Uint8Array | null = null
       client.on('request', (data) => {
         requestData = data
       })
-      
+
       const promise = client.write({
         address: 0x0013,
         functionCode: 5,
         slaveId: 1,
         value: 1,
       })
-      
+
       expect(requestData).not.toBeNull()
       const requestString = String.fromCharCode(...requestData!)
-      
-      // Expected: :01050013FF00E8\r\n  
+
+      // Expected: :01050013FF00E8\r\n
       // slave=01, func=05, addr=0013, value=FF00, LRC=E8
       expect(requestString).toMatch(/^:[0-9A-F]+\r\n$/)
       expect(requestString).toBe(':01050013FF00E8\r\n')
-      
+
       // Clean up pending request
-      client.handleResponse(new Uint8Array(Array.from(':01050013FF00E8\r\n').map(c => c.charCodeAt(0))))
+      client.handleResponse(
+        new Uint8Array(
+          Array.from(':01050013FF00E8\r\n').map((c) => c.charCodeAt(0))
+        )
+      )
       await promise
     })
   })
@@ -419,18 +427,20 @@ describe('Modbus ASCII', () => {
     it('parses valid ASCII response frame', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       const promise = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       // Response: slave=01, func=03, count=02, data=000A, LRC=F0
       const responseFrame = ':010302000AF0\r\n'
-      client.handleResponse(new Uint8Array(Array.from(responseFrame).map(c => c.charCodeAt(0))))
-      
+      client.handleResponse(
+        new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0)))
+      )
+
       const response = await promise
       expect(response.data).toEqual([10]) // 0x000A = 10
       expect(response.functionCode).toBe(3)
@@ -440,55 +450,63 @@ describe('Modbus ASCII', () => {
     it('rejects frame with bad LRC', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       const promise = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       // Response with corrupted LRC (should be F0, using FF)
       const responseFrame = ':010302000AFF\r\n'
-      client.handleResponse(new Uint8Array(Array.from(responseFrame).map(c => c.charCodeAt(0))))
-      
+      client.handleResponse(
+        new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0)))
+      )
+
       await expect(promise).rejects.toThrow(/LRC error/)
     })
 
     it('handles exception frame in ASCII', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       const promise = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       // Exception response: slave=01, func=83, code=02, LRC=7A
       const responseFrame = ':0183027A\r\n'
-      client.handleResponse(new Uint8Array(Array.from(responseFrame).map(c => c.charCodeAt(0))))
-      
+      client.handleResponse(
+        new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0)))
+      )
+
       await expect(promise).rejects.toThrow(/Illegal data address/)
     })
 
     it('handles partial frame delivery', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       const promise = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       // Send frame in chunks
-      const responseFrame = ':010302000AF0\r\n'
-      client.handleResponse(new Uint8Array(Array.from(':01030').map(c => c.charCodeAt(0))))
-      client.handleResponse(new Uint8Array(Array.from('2000AF0\r\n').map(c => c.charCodeAt(0))))
-      
+      const _responseFrame = ':010302000AF0\r\n'
+      client.handleResponse(
+        new Uint8Array(Array.from(':01030').map((c) => c.charCodeAt(0)))
+      )
+      client.handleResponse(
+        new Uint8Array(Array.from('2000AF0\r\n').map((c) => c.charCodeAt(0)))
+      )
+
       const response = await promise
       expect(response.data).toEqual([10])
     })
@@ -496,29 +514,31 @@ describe('Modbus ASCII', () => {
     it('handles multiple concatenated frames', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       const p1 = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       // Send two frames concatenated
       const frame1 = ':010302000AF0\r\n'
       const frame2 = ':010302000BEF\r\n'
-      client.handleResponse(new Uint8Array(Array.from(frame1 + frame2).map(c => c.charCodeAt(0))))
-      
+      client.handleResponse(
+        new Uint8Array(Array.from(frame1 + frame2).map((c) => c.charCodeAt(0)))
+      )
+
       const r1 = await p1
       expect(r1.data).toEqual([10])
-      
+
       const p2 = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       const r2 = await p2
       expect(r2.data).toEqual([11])
     })
@@ -526,18 +546,20 @@ describe('Modbus ASCII', () => {
     it('handles garbage before start character', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       const promise = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       // Send garbage + valid frame
       const responseData = 'garbage123:010302000AF0\r\n'
-      client.handleResponse(new Uint8Array(Array.from(responseData).map(c => c.charCodeAt(0))))
-      
+      client.handleResponse(
+        new Uint8Array(Array.from(responseData).map((c) => c.charCodeAt(0)))
+      )
+
       const response = await promise
       expect(response.data).toEqual([10])
     })
@@ -545,54 +567,60 @@ describe('Modbus ASCII', () => {
     it('rejects frame with invalid hex characters', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       const promise = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       // Frame with invalid hex character 'G'
       const responseFrame = ':01G302000AF1\r\n'
-      client.handleResponse(new Uint8Array(Array.from(responseFrame).map(c => c.charCodeAt(0))))
-      
+      client.handleResponse(
+        new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0)))
+      )
+
       await expect(promise).rejects.toThrow(/Invalid hex pair/)
     })
 
     it('rejects frame with odd number of hex characters', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       const promise = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       // Frame with odd number of hex chars (missing one char)
       const responseFrame = ':01030200AF1\r\n'
-      client.handleResponse(new Uint8Array(Array.from(responseFrame).map(c => c.charCodeAt(0))))
-      
+      client.handleResponse(
+        new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0)))
+      )
+
       await expect(promise).rejects.toThrow(/odd number of hex characters/)
     })
 
     it('rejects frame that is too short', async () => {
       const client = new ModbusClient()
       client.setProtocol('ascii')
-      
+
       const promise = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 0,
       })
-      
+
       // Frame too short (only 1 byte)
       const responseFrame = ':01F8\r\n'
-      client.handleResponse(new Uint8Array(Array.from(responseFrame).map(c => c.charCodeAt(0))))
-      
+      client.handleResponse(
+        new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0)))
+      )
+
       await expect(promise).rejects.toThrow(/too short/)
     })
   })
