@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import fc from 'fast-check'
 import { calculateCRC16, ModbusClient } from '../src/modbus.ts'
 
 // Helper to build a full RTU frame for read holding registers (FC03)
@@ -238,5 +239,41 @@ describe('Buffer handling', () => {
     // buffer already has second frame
     const r2 = await p2
     expect(r2.data).toEqual([10])
+  })
+})
+
+describe('Property based FC16 request CRC + structure', () => {
+  it('generates correct length and CRC for random register arrays', () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.integer({ min: 0, max: 0xffff }), { minLength: 1, maxLength: 10 }),
+        fc.integer({ min: 0, max: 0xff }),
+        fc.integer({ min: 0, max: 0xffff }),
+  (regs, slaveId, address) => {
+          const quantity = regs.length
+          const byteCount = quantity * 2
+          const base = [
+            slaveId,
+            16,
+            (address >> 8) & 0xff,
+            address & 0xff,
+            (quantity >> 8) & 0xff,
+            quantity & 0xff,
+            byteCount,
+            ...regs.flatMap((v: number) => [(v >> 8) & 0xff, v & 0xff]),
+          ]
+          const crc = calculateCRC16(base)
+          const frame = [...base, crc & 0xff, (crc >> 8) & 0xff]
+          const crc2 = calculateCRC16(frame.slice(0, -2))
+          return (
+            frame.length === 9 + byteCount &&
+            crc === crc2 &&
+            frame[frame.length - 2] === (crc & 0xff) &&
+            frame[frame.length - 1] === ((crc >> 8) & 0xff)
+          ) as boolean
+        }
+      ),
+      { numRuns: 50 }
+    )
   })
 })
