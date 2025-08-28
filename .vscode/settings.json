@@ -13,7 +13,8 @@
     "npm run check": true,
     "npm run fix": true,
     "pnpm check": true,
-    "pnpm fix": true
+    "pnpm fix": true,
+    "pnpm test": true
   },
   "editor.codeActionsOnSave": {
     "source.addMissingImports.ts": "always",
