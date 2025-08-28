@@ -1,6 +1,6 @@
 import type { SerialConfig } from './types.ts'
 
-// SerialManager のイベント型
+// Event types for SerialManager
 type SerialManagerEvents = {
   portSelected: [SerialPort]
   connected: []
@@ -9,7 +9,7 @@ type SerialManagerEvents = {
   data: [Uint8Array]
 }
 
-// イベントエミッター基底クラス
+// Base event emitter class
 export class EventEmitter<
   T extends Record<string, unknown[]> = Record<string, unknown[]>,
 > {
@@ -35,7 +35,7 @@ export class EventEmitter<
   }
 }
 
-// Web Serial API を使用したシリアル通信管理クラス
+// Serial communication manager using Web Serial API
 export class SerialManager extends EventEmitter<SerialManagerEvents> {
   private port: SerialPort | null = null
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null
@@ -43,25 +43,25 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
   private isConnected = false
 
   async selectPort(): Promise<void> {
-    console.log('SerialManager: ポート選択を開始')
+    console.log('SerialManager: starting port selection')
     try {
       this.port = await navigator.serial.requestPort()
-      console.log('SerialManager: ポートが選択されました', this.port)
+      console.log('SerialManager: port selected', this.port)
       this.emit('portSelected', this.port)
     } catch (error) {
-      console.error('SerialManager: ポート選択エラー', error)
-      throw new Error(`ポート選択に失敗しました: ${(error as Error).message}`)
+      console.error('SerialManager: port selection error', error)
+      throw new Error(`Failed to select port: ${(error as Error).message}`)
     }
   }
 
   async connect(config: SerialConfig): Promise<void> {
-    console.log('SerialManager: 接続を開始', config)
+    console.log('SerialManager: starting connection', config)
     if (!this.port) {
-      throw new Error('ポートが選択されていません')
+      throw new Error('No port selected')
     }
 
     if (this.isConnected) {
-      throw new Error('既に接続されています')
+      throw new Error('Already connected')
     }
 
     try {
@@ -73,7 +73,7 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
         stopBits: config.stopBits,
       })
 
-      console.log('SerialManager: ポートが開かれました')
+      console.log('SerialManager: port opened')
       this.isConnected = true
 
       // リーダーとライターを設定
@@ -89,7 +89,7 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
       this.emit('connected')
     } catch (error) {
       this.isConnected = false
-      throw new Error(`接続に失敗しました: ${(error as Error).message}`)
+      throw new Error(`Failed to connect: ${(error as Error).message}`)
     }
   }
 
@@ -120,19 +120,19 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
       this.isConnected = false
       this.emit('disconnected')
     } catch (error) {
-      throw new Error(`切断に失敗しました: ${(error as Error).message}`)
+      throw new Error(`Failed to disconnect: ${(error as Error).message}`)
     }
   }
 
   async send(data: Uint8Array): Promise<void> {
     if (!this.writer) {
-      throw new Error('シリアルポートが開かれていません')
+      throw new Error('Serial port not open')
     }
 
     try {
       await this.writer.write(data)
     } catch (error) {
-      throw new Error(`データ送信に失敗しました: ${(error as Error).message}`)
+      throw new Error(`Failed to send data: ${(error as Error).message}`)
     }
   }
 
@@ -155,7 +155,7 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
       if (this.isConnected) {
         this.emit(
           'error',
-          new Error(`データ受信エラー: ${(error as Error).message}`)
+          new Error(`Data receive error: ${(error as Error).message}`)
         )
       }
     }

@@ -1,4 +1,4 @@
-// シリアル通信設定の型定義
+// Serial communication configuration types
 export interface SerialConfig {
   baudRate: number
   dataBits: 7 | 8
@@ -6,7 +6,7 @@ export interface SerialConfig {
   stopBits: 1 | 2
 }
 
-// Modbus関連の型定義
+// Modbus related types
 export interface ModbusReadConfig {
   slaveId: number
   functionCode: number

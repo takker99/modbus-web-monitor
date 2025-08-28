@@ -9,10 +9,10 @@ import type {
 } from './types.ts'
 
 export function App() {
-  // 状態管理
+  // State management
   const [connectionStatus, setConnectionStatus] = useState<
-    '未接続' | '接続済み'
-  >('未接続')
+    'Disconnected' | 'Connected'
+  >('Disconnected')
   const [portSelected, setPortSelected] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [isMonitoring, setIsMonitoring] = useState(false)
@@ -22,7 +22,7 @@ export function App() {
   const [data, setData] = useState<ModbusResponse[]>([])
   const [hexDisplay, setHexDisplay] = useState(false)
 
-  // シリアル設定の状態
+  // Serial configuration state
   const [serialConfig, setSerialConfig] = useState<SerialConfig>({
     baudRate: 38400,
     dataBits: 8,
@@ -30,7 +30,7 @@ export function App() {
     stopBits: 1,
   })
 
-  // Modbus設定の状態
+  // Modbus configuration state
   const [slaveId, setSlaveId] = useState(1)
   const [protocol, setProtocol] = useState<'rtu' | 'ascii'>('rtu')
   const [readConfig, setReadConfig] = useState<
@@ -46,72 +46,75 @@ export function App() {
     value: '',
   })
 
-  // インスタンス（useEffectで初期化）
+  // Instances (initialized via useEffect)
   const [serialManager] = useState(() => new SerialManager())
   const [modbusClient] = useState(() => new ModbusClient())
 
   useEffect(() => {
-    // Web Serial API サポートチェック
+    // Web Serial API support check
     if (!('serial' in navigator)) {
       addLog(
-        'エラー',
-        'このブラウザはWeb Serial APIをサポートしていません。Chrome 89以降をご利用ください。'
+        'Error',
+        'This browser does not support the Web Serial API. Please use Chrome 89+.'
       )
       return
     }
 
-    // イベントリスナー設定
+    // Event listeners setup
     const setupEventListeners = () => {
-      // SerialManager イベント
+      // SerialManager events
       serialManager.on('portSelected', () => {
         console.log('Port selected')
         setPortSelected(true)
-        addLog('情報', 'ポートが選択されました')
+        addLog('Info', 'Serial port selected')
       })
 
       serialManager.on('connected', () => {
         console.log('Connected')
-        setConnectionStatus('接続済み')
+        setConnectionStatus('Connected')
         setIsConnected(true)
-        addLog('情報', 'シリアルポートに接続しました')
+        addLog('Info', 'Connected to serial port')
       })
 
       serialManager.on('disconnected', () => {
         console.log('Disconnected')
-        setConnectionStatus('未接続')
+        setConnectionStatus('Disconnected')
         setIsConnected(false)
         setIsMonitoring(false)
-        addLog('情報', 'シリアルポートから切断しました')
+        addLog('Info', 'Disconnected from serial port')
       })
 
       serialManager.on('error', (error: Error) => {
-        addLog('エラー', `シリアル通信エラー: ${error.message}`)
+        addLog('Error', `Serial communication error: ${error.message}`)
       })
 
       serialManager.on('data', (data: Uint8Array) => {
         modbusClient.handleResponse(data)
         addLog(
-          '受信',
+          'Received',
           Array.from(data)
             .map((b) => `0x${b.toString(16).padStart(2, '0')}`)
             .join(' ')
         )
       })
 
-      // ModbusClient イベント
+      // ModbusClient events
       modbusClient.on('response', (response: ModbusResponse) => {
         setData((prev) => [...prev.slice(-99), response]) // 最新100件保持
-        addLog('情報', `Modbus応答: ${response.data.length}個のデータを受信`)
+        addLog(
+          'Info',
+          `Modbus response: received ${response.data.length} values`
+        )
       })
 
       modbusClient.on('error', (error: Error) => {
-        addLog('エラー', `Modbus通信エラー: ${error.message}`)
+        addLog('Error', `Modbus communication error: ${error.message}`)
       })
 
       modbusClient.on('request', (data: Uint8Array) => {
         serialManager.send(data)
         addLog(
-          '送信',
+          'Sent',
           Array.from(data)
             .map((b) => `0x${b.toString(16).padStart(2, '0')}`)
             .join(' ')
@@ -123,7 +126,7 @@ export function App() {
     modbusClient.setProtocol(protocol)
 
     return () => {
-      // クリーンアップ
+      // Cleanup
       serialManager.disconnect()
       modbusClient.stopMonitoring()
     }
@@ -138,7 +141,7 @@ export function App() {
     try {
       await serialManager.selectPort()
     } catch (error) {
-      addLog('エラー', `ポート選択エラー: ${(error as Error).message}`)
+      addLog('Error', `Port selection error: ${(error as Error).message}`)
     }
   }
 
@@ -146,7 +149,7 @@ export function App() {
     try {
       await serialManager.connect(serialConfig)
     } catch (error) {
-      addLog('エラー', `接続エラー: ${(error as Error).message}`)
+      addLog('Error', `Connection error: ${(error as Error).message}`)
     }
   }
 
@@ -154,7 +157,7 @@ export function App() {
     try {
       await serialManager.disconnect()
     } catch (error) {
-      addLog('エラー', `切断エラー: ${(error as Error).message}`)
+      addLog('Error', `Disconnection error: ${(error as Error).message}`)
     }
   }
 
@@ -163,7 +166,7 @@ export function App() {
       const config: ModbusReadConfig = { ...readConfig, slaveId }
       await modbusClient.read(config)
     } catch (error) {
-      addLog('エラー', `読み取りエラー: ${(error as Error).message}`)
+      addLog('Error', `Read error: ${(error as Error).message}`)
     }
   }
 
@@ -185,7 +188,7 @@ export function App() {
 
       await modbusClient.write(config)
     } catch (error) {
-      addLog('エラー', `書き込みエラー: ${(error as Error).message}`)
+      addLog('Error', `Write error: ${(error as Error).message}`)
     }
   }
 
@@ -193,19 +196,19 @@ export function App() {
     if (isMonitoring) {
       modbusClient.stopMonitoring()
       setIsMonitoring(false)
-      addLog('情報', '監視を停止しました')
+      addLog('Info', 'Stopped monitoring')
     } else {
       const config: ModbusReadConfig = { ...readConfig, slaveId }
       modbusClient.startMonitoring(config, 1000)
       setIsMonitoring(true)
-      addLog('情報', '監視を開始しました')
+      addLog('Info', 'Started monitoring')
     }
   }
 
   const handleProtocolChange = (newProtocol: 'rtu' | 'ascii') => {
     setProtocol(newProtocol)
     modbusClient.setProtocol(newProtocol)
-    addLog('情報', `プロトコルを${newProtocol.toUpperCase()}に変更しました`)
+    addLog('Info', `Protocol changed to ${newProtocol.toUpperCase()}`)
   }
 
   const clearLogs = () => {
@@ -221,9 +224,9 @@ export function App() {
     try {
       const text = `${log.timestamp} [${log.type}] ${log.message}`
       await navigator.clipboard.writeText(text)
-      console.log('ログをコピーしました:', text)
+      console.log('Copied log entry:', text)
     } catch (err) {
-      console.error('ログのコピーに失敗しました:', err)
+      console.error('Failed to copy log entry:', err)
     }
   }
 
@@ -233,9 +236,9 @@ export function App() {
         .map((log) => `${log.timestamp} [${log.type}] ${log.message}`)
         .join('\n')
       await navigator.clipboard.writeText(allLogsText)
-      console.log('全ログをコピーしました')
+      console.log('Copied all logs')
     } catch (err) {
-      console.error('全ログのコピーに失敗しました:', err)
+      console.error('Failed to copy all logs:', err)
     }
   }
 
@@ -258,7 +261,7 @@ export function App() {
         <div className="connection-status">
           <span
             className={
-              connectionStatus === '接続済み'
+              connectionStatus === 'Connected'
                 ? 'status-connected'
                 : 'status-disconnected'
             }
@@ -269,11 +272,11 @@ export function App() {
       </header>
 
       <main className="main-content">
-        {/* 接続設定パネル */}
+        {/* Connection Settings Panel */}
         <section className="panel connection-panel">
-          <h2>接続設定</h2>
+          <h2>Connection Settings</h2>
           <div className="form-group">
-            <div className="form-label">シリアルポート:</div>
+            <div className="form-label">Serial Port:</div>
             <div className="port-controls">
               <button
                 className="btn btn-primary"
@@ -281,7 +284,7 @@ export function App() {
                 onClick={handlePortSelect}
                 type="button"
               >
-                ポートを選択
+                Select Port
               </button>
               <button
                 className="btn btn-success"
@@ -289,7 +292,7 @@ export function App() {
                 onClick={handleConnect}
                 type="button"
               >
-                接続
+                Connect
               </button>
               <button
                 className="btn btn-danger"
@@ -297,14 +300,14 @@ export function App() {
                 onClick={handleDisconnect}
                 type="button"
               >
-                切断
+                Disconnect
               </button>
             </div>
           </div>
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="baudRate">ボーレート:</label>
+              <label htmlFor="baudRate">Baud Rate:</label>
               <select
                 disabled={isConnected}
                 id="baudRate"
@@ -325,7 +328,7 @@ export function App() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="dataBits">データビット:</label>
+              <label htmlFor="dataBits">Data Bits:</label>
               <select
                 disabled={isConnected}
                 id="dataBits"
@@ -343,7 +346,7 @@ export function App() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="parity">パリティ:</label>
+              <label htmlFor="parity">Parity:</label>
               <select
                 disabled={isConnected}
                 id="parity"
@@ -355,14 +358,14 @@ export function App() {
                 }
                 value={serialConfig.parity}
               >
-                <option value="none">なし</option>
-                <option value="even">偶数</option>
-                <option value="odd">奇数</option>
+                <option value="none">None</option>
+                <option value="even">Even</option>
+                <option value="odd">Odd</option>
               </select>
             </div>
 
             <div className="form-group">
-              <label htmlFor="stopBits">ストップビット:</label>
+              <label htmlFor="stopBits">Stop Bits:</label>
               <select
                 disabled={isConnected}
                 id="stopBits"
@@ -382,7 +385,7 @@ export function App() {
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="slaveId">スレーブID:</label>
+              <label htmlFor="slaveId">Slave ID:</label>
               <input
                 disabled={isConnected}
                 id="slaveId"
@@ -395,7 +398,7 @@ export function App() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="protocol">プロトコル:</label>
+              <label htmlFor="protocol">Protocol:</label>
               <select
                 disabled={isConnected}
                 id="protocol"
@@ -411,12 +414,12 @@ export function App() {
           </div>
         </section>
 
-        {/* 読み取り設定パネル */}
+        {/* Read Settings Panel */}
         <section className="panel read-panel">
-          <h2>データ読み取り</h2>
+          <h2>Read Data</h2>
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="readFunctionCode">ファンクションコード:</label>
+              <label htmlFor="readFunctionCode">Function Code:</label>
               <select
                 disabled={!isConnected}
                 id="readFunctionCode"
@@ -428,15 +431,15 @@ export function App() {
                 }
                 value={readConfig.functionCode}
               >
-                <option value={1}>01 - コイル読み取り</option>
-                <option value={2}>02 - 入力ステータス読み取り</option>
-                <option value={3}>03 - ホールディングレジスタ読み取り</option>
-                <option value={4}>04 - 入力レジスタ読み取り</option>
+                <option value={1}>01 - Read Coils</option>
+                <option value={2}>02 - Read Discrete Inputs</option>
+                <option value={3}>03 - Read Holding Registers</option>
+                <option value={4}>04 - Read Input Registers</option>
               </select>
             </div>
 
             <div className="form-group">
-              <label htmlFor="startAddress">開始アドレス:</label>
+              <label htmlFor="startAddress">Start Address:</label>
               <input
                 disabled={!isConnected}
                 id="startAddress"
@@ -454,7 +457,7 @@ export function App() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="quantity">読み取り数:</label>
+              <label htmlFor="quantity">Quantity:</label>
               <input
                 disabled={!isConnected}
                 id="quantity"
@@ -478,7 +481,7 @@ export function App() {
                 onClick={handleRead}
                 type="button"
               >
-                読み取り実行
+                Read Once
               </button>
               <button
                 className="btn btn-secondary"
@@ -486,18 +489,18 @@ export function App() {
                 onClick={handleMonitorToggle}
                 type="button"
               >
-                {isMonitoring ? '監視停止' : '監視開始'}
+                {isMonitoring ? 'Stop Monitor' : 'Start Monitor'}
               </button>
             </div>
           </div>
         </section>
 
-        {/* 書き込み設定パネル */}
+        {/* Write Settings Panel */}
         <section className="panel write-panel">
-          <h2>データ書き込み</h2>
+          <h2>Write Data</h2>
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="writeFunctionCode">ファンクションコード:</label>
+              <label htmlFor="writeFunctionCode">Function Code:</label>
               <select
                 disabled={!isConnected}
                 id="writeFunctionCode"
@@ -509,15 +512,15 @@ export function App() {
                 }
                 value={writeConfig.functionCode}
               >
-                <option value={5}>05 - 単一コイル書き込み</option>
-                <option value={6}>06 - 単一レジスタ書き込み</option>
-                <option value={15}>15 - 複数コイル書き込み</option>
-                <option value={16}>16 - 複数レジスタ書き込み</option>
+                <option value={5}>05 - Write Single Coil</option>
+                <option value={6}>06 - Write Single Register</option>
+                <option value={15}>15 - Write Multiple Coils</option>
+                <option value={16}>16 - Write Multiple Registers</option>
               </select>
             </div>
 
             <div className="form-group">
-              <label htmlFor="writeAddress">書き込みアドレス:</label>
+              <label htmlFor="writeAddress">Write Address:</label>
               <input
                 disabled={!isConnected}
                 id="writeAddress"
@@ -535,7 +538,7 @@ export function App() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="writeValue">書き込み値:</label>
+              <label htmlFor="writeValue">Value:</label>
               <input
                 disabled={!isConnected}
                 id="writeValue"
@@ -545,7 +548,7 @@ export function App() {
                     value: e.currentTarget.value,
                   }))
                 }
-                placeholder="例: 1234 または 0x04D2"
+                placeholder="e.g. 1234 or 0x04D2"
                 type="text"
                 value={writeConfig.value}
               />
@@ -558,15 +561,15 @@ export function App() {
                 onClick={handleWrite}
                 type="button"
               >
-                書き込み実行
+                Write
               </button>
             </div>
           </div>
         </section>
 
-        {/* データ表示パネル */}
+        {/* Data Display Panel */}
         <section className="panel data-panel">
-          <h2>データ表示</h2>
+          <h2>Data Display</h2>
           <div className="data-controls">
             <label>
               <input
@@ -574,21 +577,21 @@ export function App() {
                 onChange={(e) => setHexDisplay(e.currentTarget.checked)}
                 type="checkbox"
               />{' '}
-              16進数表示
+              Hex Display
             </label>
             <button
               className="btn btn-secondary"
               onClick={clearLogs}
               type="button"
             >
-              ログクリア
+              Clear Logs
             </button>
             <button
               className="btn btn-secondary"
               onClick={copyAllLogs}
               type="button"
             >
-              全ログコピー
+              Copy All Logs
             </button>
           </div>
 
@@ -597,9 +600,9 @@ export function App() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>アドレス</th>
-                    <th>値</th>
-                    <th>時刻</th>
+                    <th>Address</th>
+                    <th>Value</th>
+                    <th>Time</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -623,11 +626,11 @@ export function App() {
             </div>
 
             <div className="log-container">
-              <h3>通信ログ</h3>
+              <h3>Communication Log</h3>
               <div className="log-display">
                 {logs.map((log, index) => (
                   <div
-                    className={`log-entry log-${log.type === 'エラー' ? 'error' : log.type === '送信' ? 'sent' : log.type === '受信' ? 'received' : 'info'}`}
+                    className={`log-entry log-${log.type === 'Error' ? 'error' : log.type === 'Sent' ? 'sent' : log.type === 'Received' ? 'received' : 'info'}`}
                     key={`log-${log.timestamp}-${index}`}
                   >
                     <span className="log-timestamp">{log.timestamp}</span>
@@ -636,7 +639,7 @@ export function App() {
                     <button
                       className="log-copy-btn"
                       onClick={() => copyLogEntry(log)}
-                      title="このログをコピー"
+                      title="Copy this log"
                       type="button"
                     >
                       📋

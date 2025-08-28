@@ -16,83 +16,83 @@ class ModbusWebMonitor {
   }
 
   private init() {
-    console.log('ModbusWebMonitor: 初期化開始')
+    console.log('ModbusWebMonitor: initialization start')
 
-    // Web Serial API のサポートチェック
+    // Check Web Serial API support
     if (!('serial' in navigator)) {
-      console.error('Web Serial APIがサポートされていません')
+      console.error('Web Serial API not supported')
       alert(
-        'このブラウザはWeb Serial APIをサポートしていません。Chrome 89以降をご利用ください。'
+        'This browser does not support the Web Serial API. Please use Chrome 89+.'
       )
       return
     }
 
-    console.log('Web Serial APIがサポートされています')
+    console.log('Web Serial API is supported')
     this.setupEventListeners()
-    this.uiManager.updateConnectionStatus('未接続')
-    console.log('ModbusWebMonitor: 初期化完了')
+    this.uiManager.updateConnectionStatus('Disconnected')
+    console.log('ModbusWebMonitor: initialization complete')
   }
 
   private setupEventListeners() {
-    // シリアル接続関連のイベント
+    // Serial connection related events
     this.serialManager.on('portSelected', () => {
-      console.log(
-        'ModbusWebMonitor: ポートが選択されました - 接続ボタンを有効化'
-      )
+      console.log('ModbusWebMonitor: port selected - enabling connect button')
       this.uiManager.enablePortSelection(true)
     })
 
     this.serialManager.on('connected', () => {
-      this.uiManager.updateConnectionStatus('接続済み')
+      this.uiManager.updateConnectionStatus('Connected')
       this.uiManager.enableControls(true)
     })
 
     this.serialManager.on('disconnected', () => {
-      this.uiManager.updateConnectionStatus('未接続')
+      this.uiManager.updateConnectionStatus('Disconnected')
       this.uiManager.enableControls(false)
-      // ポートは選択済みなので接続ボタンは有効のまま
+      // Port remains selected so connect button stays enabled
       this.uiManager.enablePortSelection(true)
     })
 
     this.serialManager.on('error', (error: Error) => {
-      this.uiManager.logError(`シリアル通信エラー: ${error.message}`)
+      this.uiManager.logError(`Serial communication error: ${error.message}`)
     })
 
     this.serialManager.on('data', (data: Uint8Array) => {
       this.modbusClient.handleResponse(data)
     })
 
-    // Modbus通信関連のイベント
+    // Modbus communication related events
     this.modbusClient.on('response', (data) => {
       this.uiManager.displayData(data)
     })
 
     this.modbusClient.on('error', (error: Error) => {
-      this.uiManager.logError(`Modbus通信エラー: ${error.message}`)
+      this.uiManager.logError(`Modbus communication error: ${error.message}`)
     })
 
     this.modbusClient.on('request', (data: Uint8Array) => {
       this.serialManager.send(data)
-      this.uiManager.logCommunication('送信', data)
+      this.uiManager.logCommunication('Sent', data)
     })
 
-    // UI関連のイベント
+    // UI related events
     this.uiManager.on('portSelect', async () => {
       try {
         await this.serialManager.selectPort()
       } catch (error) {
-        this.uiManager.logError(`ポート選択エラー: ${(error as Error).message}`)
+        this.uiManager.logError(
+          `Port selection error: ${(error as Error).message}`
+        )
       }
     })
 
     this.uiManager.on('connect', async () => {
-      console.log('ModbusWebMonitor: 接続要求を受信')
+      console.log('ModbusWebMonitor: received connect request')
       try {
         const config = this.uiManager.getSerialConfig()
-        console.log('ModbusWebMonitor: シリアル設定', config)
+        console.log('ModbusWebMonitor: serial config', config)
         await this.serialManager.connect(config)
       } catch (error) {
-        const errorMessage = `接続エラー: ${(error as Error).message}`
+        const errorMessage = `Connection error: ${(error as Error).message}`
         console.error('ModbusWebMonitor:', errorMessage)
         this.uiManager.logError(errorMessage)
       }
@@ -102,7 +102,9 @@ class ModbusWebMonitor {
       try {
         await this.serialManager.disconnect()
       } catch (error) {
-        this.uiManager.logError(`切断エラー: ${(error as Error).message}`)
+        this.uiManager.logError(
+          `Disconnection error: ${(error as Error).message}`
+        )
       }
     })
 
@@ -126,14 +128,14 @@ class ModbusWebMonitor {
     })
 
     this.uiManager.on('protocolChange', (protocol) => {
-      console.log('ModbusWebMonitor: プロトコル変更', protocol)
+      console.log('ModbusWebMonitor: protocol change', protocol)
       this.modbusClient.setProtocol(protocol)
     })
   }
 }
 
-// アプリケーション開始
+// Application start
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOMContentLoaded: ModbusWebMonitorを開始')
+  console.log('DOMContentLoaded: starting ModbusWebMonitor')
   new ModbusWebMonitor()
 })

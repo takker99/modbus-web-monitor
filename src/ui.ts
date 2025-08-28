@@ -6,7 +6,7 @@ import type {
   SerialConfig,
 } from './types.ts'
 
-// UIManagerのイベント型
+// UIManager event types
 type UIManagerEvents = {
   portSelect: []
   connect: []
@@ -31,7 +31,7 @@ export class UIManager extends EventEmitter<UIManagerEvents> {
   }
 
   private initializeButtonStates() {
-    console.log('UIManager: ボタンの初期状態を設定')
+    console.log('UIManager: setting initial button states')
     // 初期状態では接続ボタンを無効化
     if (this.elements['connect-btn']) {
       ;(this.elements['connect-btn'] as HTMLButtonElement).disabled = true
@@ -71,36 +71,36 @@ export class UIManager extends EventEmitter<UIManagerEvents> {
       'communication-log',
     ]
 
-    console.log('UIManager: 要素の初期化開始')
+    console.log('UIManager: initializing elements')
     for (const id of elementIds) {
       const element = document.getElementById(id)
       if (element) {
         this.elements[id] = element
-        console.log(`UIManager: 要素 '${id}' が見つかりました`)
+        console.log(`UIManager: element '${id}' found`)
       } else {
-        console.warn(`UIManager: 要素 '${id}' が見つかりません`)
+        console.warn(`UIManager: element '${id}' not found`)
       }
     }
-    console.log('UIManager: 要素の初期化完了')
+    console.log('UIManager: element initialization complete')
   }
 
   private setupEventListeners() {
-    console.log('UIManager: イベントリスナーの設定開始')
+    console.log('UIManager: setting up event listeners')
 
     // ポート選択
     this.elements['port-select']?.addEventListener('click', () => {
-      console.log('UIManager: ポート選択ボタンがクリックされました')
+      console.log('UIManager: port select button clicked')
       this.emit('portSelect')
     })
 
     // 接続・切断
     this.elements['connect-btn']?.addEventListener('click', () => {
-      console.log('UIManager: 接続ボタンがクリックされました')
+      console.log('UIManager: connect button clicked')
       this.emit('connect')
     })
 
     this.elements['disconnect-btn']?.addEventListener('click', () => {
-      console.log('UIManager: 切断ボタンがクリックされました')
+      console.log('UIManager: disconnect button clicked')
       this.emit('disconnect')
     })
 
@@ -116,13 +116,13 @@ export class UIManager extends EventEmitter<UIManagerEvents> {
         this.emit('monitorStop')
         this.isMonitoring = false
         ;(this.elements['monitor-btn'] as HTMLButtonElement).textContent =
-          '監視開始'
+          'Start Monitor'
       } else {
         const readConfig = this.getReadConfig()
         this.emit('monitorStart', readConfig)
         this.isMonitoring = true
         ;(this.elements['monitor-btn'] as HTMLButtonElement).textContent =
-          '監視停止'
+          'Stop Monitor'
       }
     })
 
@@ -151,7 +151,7 @@ export class UIManager extends EventEmitter<UIManagerEvents> {
     if (this.elements['connection-status']) {
       this.elements['connection-status'].textContent = status
       this.elements['connection-status'].className =
-        status === '接続済み' ? 'status-connected' : 'status-disconnected'
+        status === 'Connected' ? 'status-connected' : 'status-disconnected'
     }
   }
 
@@ -179,7 +179,7 @@ export class UIManager extends EventEmitter<UIManagerEvents> {
   }
 
   enablePortSelection(portSelected: boolean) {
-    console.log('UIManager: ポート選択状態を更新', portSelected)
+    console.log('UIManager: updating port selection state', portSelected)
     // ポート選択後は接続ボタンを有効化
     if (this.elements['connect-btn']) {
       ;(this.elements['connect-btn'] as HTMLButtonElement).disabled =
@@ -298,7 +298,7 @@ export class UIManager extends EventEmitter<UIManagerEvents> {
     }
   }
 
-  logCommunication(direction: '送信' | '受信', data: Uint8Array) {
+  logCommunication(direction: 'Sent' | 'Received', data: Uint8Array) {
     const logElement = this.elements['communication-log']
     if (!logElement) return
 
@@ -308,10 +308,10 @@ export class UIManager extends EventEmitter<UIManagerEvents> {
       .join(' ')
 
     const logEntry = document.createElement('div')
-    logEntry.className = `log-entry log-${direction === '送信' ? 'tx' : 'rx'}`
+    logEntry.className = `log-entry log-${direction === 'Sent' ? 'tx' : 'rx'}`
     logEntry.innerHTML = `
       <span class="log-time">${timestamp}</span>
-      <span class="log-direction">[${direction}]</span>
+  <span class="log-direction">[${direction}]</span>
       <span class="log-data">${hexData}</span>
     `
 
@@ -338,7 +338,7 @@ export class UIManager extends EventEmitter<UIManagerEvents> {
     logEntry.className = 'log-entry log-error'
     logEntry.innerHTML = `
       <span class="log-time">${timestamp}</span>
-      <span class="log-direction">[エラー]</span>
+      <span class="log-direction">[Error]</span>
       <span class="log-data">${message}</span>
     `
 

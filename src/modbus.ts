@@ -5,7 +5,7 @@ import type {
   ModbusWriteConfig,
 } from './types.ts'
 
-// CRC16 Modbus計算関数
+// CRC16 Modbus calculation function
 function calculateCRC16(data: number[]): number {
   let crc = 0xffff
   for (const byte of data) {
@@ -21,14 +21,14 @@ function calculateCRC16(data: number[]): number {
   return crc
 }
 
-// ModbusClient のイベント型
+// Event types for ModbusClient
 type ModbusClientEvents = {
   response: [ModbusResponse]
   error: [Error]
   request: [Uint8Array]
 }
 
-// Modbusクライアントクラス
+// Modbus client class
 export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   private protocol: 'rtu' | 'ascii' = 'rtu'
   private pendingRequest: {
@@ -48,7 +48,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   async read(config: ModbusReadConfig): Promise<ModbusResponse> {
     return new Promise((resolve, reject) => {
       if (this.pendingRequest) {
-        reject(new Error('別のリクエストが実行中です'))
+        reject(new Error('Another request is in progress'))
         return
       }
 
@@ -60,7 +60,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         slaveId: config.slaveId,
         timeout: setTimeout(() => {
           this.pendingRequest = null
-          reject(new Error('タイムアウトしました'))
+          reject(new Error('Request timed out'))
         }, 3000),
       }
 
@@ -71,7 +71,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   async write(config: ModbusWriteConfig): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.pendingRequest) {
-        reject(new Error('別のリクエストが実行中です'))
+        reject(new Error('Another request is in progress'))
         return
       }
 
@@ -83,7 +83,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         slaveId: config.slaveId,
         timeout: setTimeout(() => {
           this.pendingRequest = null
-          reject(new Error('タイムアウトしました'))
+          reject(new Error('Request timed out'))
         }, 3000),
       }
 
@@ -112,7 +112,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   }
 
   handleResponse(data: Uint8Array) {
-    // データをバッファに追加
+    // Append data to buffer
     this.buffer.push(...Array.from(data))
 
     if (this.protocol === 'rtu') {
@@ -123,7 +123,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   }
 
   private handleRTUResponse() {
-    // RTUレスポンスの最小長は5バイト（スレーブID + ファンクション + データ長 + CRC）
+    // Minimum RTU response length is 5 bytes (slaveID + function + data length + CRC)
     if (this.buffer.length < 5) return
 
     const slaveId = this.buffer[0]
@@ -137,7 +137,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
       return
     }
 
-    // エラーレスポンスチェック
+    // Error response check
     if (functionCode & 0x80) {
       const errorCode = this.buffer[2]
       this.handleError(errorCode)
@@ -151,34 +151,34 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
       functionCode === 3 ||
       functionCode === 4
     ) {
-      // 読み取り系ファンクション
+      // Read function
       const dataLength = this.buffer[2]
-      responseLength = 3 + dataLength + 2 // スレーブID + ファンクション + データ長 + データ + CRC
+      responseLength = 3 + dataLength + 2 // slaveID + function + byte count + data + CRC
     } else {
-      // 書き込み系ファンクション
-      responseLength = 8 // 固定長
+      // Write function
+      responseLength = 8 // fixed length
     }
 
     if (this.buffer.length < responseLength) return
 
-    // CRCチェック
+    // CRC check
     const messageWithoutCRC = this.buffer.slice(0, responseLength - 2)
     const receivedCRC =
       (this.buffer[responseLength - 1] << 8) | this.buffer[responseLength - 2]
     const calculatedCRC = calculateCRC16(messageWithoutCRC)
 
     if (receivedCRC !== calculatedCRC) {
-      this.handleError(new Error('CRCエラー'))
+      this.handleError(new Error('CRC error'))
       return
     }
 
-    // レスポンス処理
+    // Process response
     this.processValidResponse(responseLength)
   }
 
   private handleASCIIResponse() {
-    // ASCII形式の実装（簡略化）
-    // 実際の実装では':'で開始し、CR+LFで終了するフレームを検出
+    // Simplified ASCII implementation
+    // Real implementation would detect ':' start and CR+LF end
     const frame = this.buffer
     if (frame.length >= 7) {
       // 最小フレーム長
@@ -223,7 +223,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     this.pendingRequest.resolve(modbusResponse)
     this.pendingRequest = null
 
-    // バッファをクリア
+    // Trim processed bytes from buffer
     this.buffer = this.buffer.slice(responseLength)
   }
 
@@ -234,20 +234,18 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
 
     if (typeof error === 'number') {
       const errorMessages: { [key: number]: string } = {
-        1: '不正なファンクションコード',
-        2: '不正なデータアドレス（指定したアドレスは存在しません）',
-        3: '不正なデータ値',
-        4: 'スレーブデバイス障害',
-        5: '確認応答',
-        6: 'スレーブデバイスビジー',
-        8: 'メモリパリティエラー',
-        10: 'ゲートウェイパス利用不可',
-        11: 'ゲートウェイターゲットデバイス応答失敗',
+        1: 'Illegal function',
+        2: 'Illegal data address (address does not exist)',
+        3: 'Illegal data value',
+        4: 'Slave device failure',
+        5: 'Acknowledge',
+        6: 'Slave device busy',
+        8: 'Memory parity error',
+        10: 'Gateway path unavailable',
+        11: 'Gateway target device failed to respond',
       }
-      const errorMessage = errorMessages[error] || `Modbusエラー ${error}`
-      this.pendingRequest.reject(
-        new Error(`${errorMessage} (エラーコード: ${error})`)
-      )
+      const errorMessage = errorMessages[error] || `Modbus error ${error}`
+      this.pendingRequest.reject(new Error(`${errorMessage} (code: ${error})`))
     } else {
       this.pendingRequest.reject(error)
     }
@@ -278,7 +276,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     let request: number[]
 
     if (config.functionCode === 5) {
-      // 単一コイル書き込み
+      // Write single coil
       const value = Array.isArray(config.value) ? config.value[0] : config.value
       request = [
         config.slaveId,
@@ -289,7 +287,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         0x00,
       ]
     } else if (config.functionCode === 6) {
-      // 単一レジスタ書き込み
+      // Write single register
       const value = Array.isArray(config.value) ? config.value[0] : config.value
       request = [
         config.slaveId,
@@ -300,9 +298,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         value & 0xff,
       ]
     } else {
-      throw new Error(
-        `サポートされていないファンクションコード: ${config.functionCode}`
-      )
+      throw new Error(`Unsupported function code: ${config.functionCode}`)
     }
 
     if (this.protocol === 'rtu') {
