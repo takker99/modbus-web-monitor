@@ -40,6 +40,29 @@ describe('Request frame building (read)', () => {
   })
 })
 
+describe('Write single (FC05/06)', () => {
+  it('builds and parses FC05 single coil write echo', async () => {
+    const client = new ModbusClient()
+    const promise = client.write({ slaveId: 1, functionCode: 5, address: 0x0013, value: 1 })
+    // Echo response: slave, fc, addr hi, addr lo, value hi, value lo
+    const frame = [1,5,0x00,0x13,0xFF,0x00]
+    const crc = calculateCRC16(frame)
+    frame.push(crc & 0xff, (crc >> 8) & 0xff)
+    client.handleResponse(new Uint8Array(frame))
+    await expect(promise).resolves.toBeUndefined()
+  })
+
+  it('builds and parses FC06 single register write echo', async () => {
+    const client = new ModbusClient()
+    const promise = client.write({ slaveId: 2, functionCode: 6, address: 0x0001, value: 0x0A0B })
+    const frame = [2,6,0x00,0x01,0x0A,0x0B]
+    const crc = calculateCRC16(frame)
+    frame.push(crc & 0xff, (crc >> 8) & 0xff)
+    client.handleResponse(new Uint8Array(frame))
+    await expect(promise).resolves.toBeUndefined()
+  })
+})
+
 describe('Response parsing', () => {
   it('parses a valid FC03 response with 2 registers', async () => {
     const client = new ModbusClient()
