@@ -321,6 +321,50 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         (value >> 8) & 0xff,
         value & 0xff,
       ]
+    } else if (config.functionCode === 15) {
+      // Write multiple coils (FC15)
+      if (!Array.isArray(config.value)) {
+        throw new Error('FC15 requires value to be an array of bits (0/1)')
+      }
+      const quantity = config.value.length
+      const byteCount = Math.ceil(quantity / 8)
+      const coilBytes: number[] = new Array(byteCount).fill(0)
+      config.value.forEach((bit, i) => {
+        if (bit) {
+          coilBytes[Math.floor(i / 8)] |= 1 << (i % 8)
+        }
+      })
+      request = [
+        config.slaveId,
+        config.functionCode,
+        (config.address >> 8) & 0xff,
+        config.address & 0xff,
+        (quantity >> 8) & 0xff,
+        quantity & 0xff,
+        byteCount,
+        ...coilBytes,
+      ]
+    } else if (config.functionCode === 16) {
+      // Write multiple registers (FC16)
+      if (!Array.isArray(config.value)) {
+        throw new Error('FC16 requires value to be an array of register values')
+      }
+      const quantity = config.value.length
+      const byteCount = quantity * 2
+      const registers: number[] = []
+      for (const v of config.value) {
+        registers.push((v >> 8) & 0xff, v & 0xff)
+      }
+      request = [
+        config.slaveId,
+        config.functionCode,
+        (config.address >> 8) & 0xff,
+        config.address & 0xff,
+        (quantity >> 8) & 0xff,
+        quantity & 0xff,
+        byteCount,
+        ...registers,
+      ]
     } else {
       throw new Error(`Unsupported function code: ${config.functionCode}`)
     }
