@@ -12,6 +12,15 @@ export type WriteSingleFunctionCode = 5 | 6
 export type WriteMultiFunctionCode = 15 | 16
 export type WriteFunctionCode = WriteSingleFunctionCode | WriteMultiFunctionCode
 
+// Runtime type guard functions for safe function code validation
+export function isReadFunctionCode(code: number): code is ReadFunctionCode {
+  return code === 1 || code === 2 || code === 3 || code === 4
+}
+
+export function isWriteFunctionCode(code: number): code is WriteFunctionCode {
+  return code === 5 || code === 6 || code === 15 || code === 16
+}
+
 // Modbus related types
 export interface ModbusReadConfig {
   slaveId: number

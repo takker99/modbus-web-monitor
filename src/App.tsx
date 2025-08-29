@@ -9,6 +9,7 @@ import type {
   SerialConfig,
   WriteFunctionCode,
 } from './types.ts'
+import { isReadFunctionCode, isWriteFunctionCode } from './types.ts'
 
 export function App() {
   // State management
@@ -425,14 +426,17 @@ export function App() {
               <select
                 disabled={!isConnected}
                 id="readFunctionCode"
-                onChange={(e) =>
-                  setReadConfig((prev) => ({
-                    ...prev,
-                    functionCode: Number(
-                      e.currentTarget.value
-                    ) as ReadFunctionCode,
-                  }))
-                }
+                onChange={(e) => {
+                  const value = Number(e.currentTarget.value)
+                  if (isReadFunctionCode(value)) {
+                    setReadConfig((prev) => ({
+                      ...prev,
+                      functionCode: value,
+                    }))
+                  } else {
+                    console.error('Invalid read function code:', value)
+                  }
+                }}
                 value={readConfig.functionCode}
               >
                 <option value={1}>01 - Read Coils</option>
@@ -508,14 +512,17 @@ export function App() {
               <select
                 disabled={!isConnected}
                 id="writeFunctionCode"
-                onChange={(e) =>
-                  setWriteConfig((prev) => ({
-                    ...prev,
-                    functionCode: Number(
-                      e.currentTarget.value
-                    ) as WriteFunctionCode,
-                  }))
-                }
+                onChange={(e) => {
+                  const value = Number(e.currentTarget.value)
+                  if (isWriteFunctionCode(value)) {
+                    setWriteConfig((prev) => ({
+                      ...prev,
+                      functionCode: value,
+                    }))
+                  } else {
+                    console.error('Invalid write function code:', value)
+                  }
+                }}
                 value={writeConfig.functionCode}
               >
                 <option value={5}>05 - Write Single Coil</option>
