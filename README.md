@@ -82,6 +82,20 @@ pnpm preview
 - Received: inbound Modbus frame bytes
 - Error: serial / protocol / timeout issues
 
+## Screenshots
+
+### FC15 - Write Multiple Coils Interface
+
+![FC15 Multi-Coil Write Interface](https://github.com/user-attachments/assets/09eb3fe7-b5e3-4a14-b88d-ad65e82b701b)
+
+The FC15 interface allows you to write multiple coils at once. Enter coil values as comma or space-separated bits (0 or 1), with a maximum of 1968 coils.
+
+### FC16 - Write Multiple Registers Interface  
+
+![FC16 Multi-Register Write Interface](https://github.com/user-attachments/assets/812d1fb4-328f-4f5e-b04d-e2f05985c36c)
+
+The FC16 interface allows you to write multiple registers at once. Enter register values as comma, space, or line-separated numbers (0-65535), with support for hexadecimal values when hex display mode is enabled. Maximum of 123 registers.
+
 ## Modbus Frames (RTU)
 
 Read request (example FC03):
