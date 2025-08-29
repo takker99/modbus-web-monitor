@@ -36,6 +36,15 @@ export interface ModbusWriteConfig {
   value: number | number[]
 }
 
+// Extended interface for the UI state (includes additional fields for multi-value input)
+export interface ModbusWriteUIConfig {
+  address: number
+  functionCode: WriteFunctionCode
+  multiValues: string // For multi-write input (comma-separated or multi-line)
+  quantity: number // For multi-writes (FC15/16)
+  value: string // For single-value input
+}
+
 export interface ModbusResponse {
   slaveId: number
   functionCode: number
