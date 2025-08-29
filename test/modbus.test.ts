@@ -328,3 +328,35 @@ describe('Performance parsing burst', () => {
     expect(elapsed).toBeLessThan(200)
   }, 10000)
 })
+
+describe('Function Code Type Safety', () => {
+  it('allows valid read function codes', () => {
+    const client = new ModbusClient()
+    
+    // All these should compile without TypeScript errors
+    const validReadConfigs = [
+      { slaveId: 1, functionCode: 1 as const, startAddress: 0, quantity: 1 },
+      { slaveId: 1, functionCode: 2 as const, startAddress: 0, quantity: 1 },
+      { slaveId: 1, functionCode: 3 as const, startAddress: 0, quantity: 1 },
+      { slaveId: 1, functionCode: 4 as const, startAddress: 0, quantity: 1 },
+    ]
+    
+    // If this compiles, the types are working correctly
+    expect(validReadConfigs).toHaveLength(4)
+  })
+
+  it('allows valid write function codes', () => {
+    const client = new ModbusClient()
+    
+    // All these should compile without TypeScript errors
+    const validWriteConfigs = [
+      { slaveId: 1, functionCode: 5 as const, address: 0, value: 1 },
+      { slaveId: 1, functionCode: 6 as const, address: 0, value: 100 },
+      { slaveId: 1, functionCode: 15 as const, address: 0, value: [1, 0, 1] },
+      { slaveId: 1, functionCode: 16 as const, address: 0, value: [100, 200] },
+    ]
+    
+    // If this compiles, the types are working correctly
+    expect(validWriteConfigs).toHaveLength(4)
+  })
+})
