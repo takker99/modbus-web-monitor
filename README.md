@@ -78,6 +78,54 @@ pnpm preview
 - Received: inbound Modbus frame bytes
 - Error: serial / protocol / timeout issues
 
+## Function Code Interface Screenshots
+
+The following screenshots show the interface for each supported Modbus function code with realistic example data:
+
+### Read Operations
+
+#### FC01 - Read Coils
+Interface for reading coil status (digital outputs). Example shows reading 8 coils starting at address 16.
+
+![FC01 - Read Coils](screenshots/fc01-read-coils.png)
+
+#### FC02 - Read Discrete Inputs  
+Interface for reading discrete input status (digital inputs). Example shows reading 12 inputs starting at address 100.
+
+![FC02 - Read Discrete Inputs](screenshots/fc02-read-discrete-inputs.png)
+
+#### FC03 - Read Holding Registers
+Interface for reading holding register values (read/write registers). Example shows reading 10 registers starting at address 40001.
+
+![FC03 - Read Holding Registers](screenshots/fc03-read-holding-registers.png)
+
+#### FC04 - Read Input Registers
+Interface for reading input register values (read-only registers). Example shows reading 6 registers starting at address 30001.
+
+![FC04 - Read Input Registers](screenshots/fc04-read-input-registers.png)
+
+### Write Operations
+
+#### FC05 - Write Single Coil
+Interface for writing a single coil value. Example shows writing value 1 to address 19.
+
+![FC05 - Write Single Coil](screenshots/fc05-write-single-coil.png)
+
+#### FC06 - Write Single Register
+Interface for writing a single register value. Example shows writing hex value 0x1234 to address 40001.
+
+![FC06 - Write Single Register](screenshots/fc06-write-single-register.png)
+
+#### FC15 - Write Multiple Coils
+Interface for writing multiple coil values. Example shows writing bit pattern 1,0,1,1,0,1,0,0 starting at address 16.
+
+![FC15 - Write Multiple Coils](screenshots/fc15-write-multiple-coils.png)
+
+#### FC16 - Write Multiple Registers
+Interface for writing multiple register values. Example shows writing values 1234,5678,0xABCD starting at address 40100.
+
+![FC16 - Write Multiple Registers](screenshots/fc16-write-multiple-registers.png)
+
 ## Modbus Frames (RTU)
 
 Read request (example FC03):
