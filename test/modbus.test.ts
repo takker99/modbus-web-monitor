@@ -328,3 +328,99 @@ describe('Performance parsing burst', () => {
     expect(elapsed).toBeLessThan(200)
   }, 10000)
 })
+
+describe('Multi-write operations (FC15/16)', () => {
+  it('builds and sends FC15 multi-coil write request', async () => {
+    const client = new ModbusClient()
+    const promise = client.write({
+      address: 0x0013,
+      functionCode: 15,
+      slaveId: 1,
+      value: [1, 0, 1, 1, 0, 1, 0, 0], // 8 coils
+    })
+
+    // Simulate response: slave, fc, addr hi, addr lo, qty hi, qty lo, crc
+    const response = [1, 15, 0x00, 0x13, 0x00, 0x08]
+    const crc = calculateCRC16(response)
+    response.push(crc & 0xff, (crc >> 8) & 0xff)
+
+    client.handleResponse(new Uint8Array(response))
+    await promise // Should resolve without error
+  })
+
+  it('builds and sends FC16 multi-register write request', async () => {
+    const client = new ModbusClient()
+    const promise = client.write({
+      address: 0x0001,
+      functionCode: 16,
+      slaveId: 1,
+      value: [0x1234, 0x5678, 0x9abc], // 3 registers
+    })
+
+    // Simulate response: slave, fc, addr hi, addr lo, qty hi, qty lo, crc
+    const response = [1, 16, 0x00, 0x01, 0x00, 0x03]
+    const crc = calculateCRC16(response)
+    response.push(crc & 0xff, (crc >> 8) & 0xff)
+
+    client.handleResponse(new Uint8Array(response))
+    await promise // Should resolve without error
+  })
+
+  it('validates FC15 array requirement', async () => {
+    const client = new ModbusClient()
+    await expect(
+      client.write({
+        address: 0x0013,
+        functionCode: 15,
+        slaveId: 1,
+        value: 1, // Should be array for FC15
+      })
+    ).rejects.toThrow('FC15 requires value to be an array of bits')
+  })
+
+  it('validates FC16 array requirement', async () => {
+    const client = new ModbusClient()
+    await expect(
+      client.write({
+        address: 0x0001,
+        functionCode: 16,
+        slaveId: 1,
+        value: 1234, // Should be array for FC16
+      })
+    ).rejects.toThrow('FC16 requires value to be an array of register values')
+  })
+
+  it('correctly encodes FC15 coil bits into bytes', () => {
+    // This test checks the bit packing logic inside buildWriteRequest
+    // We'll create a client, capture the request frame, and verify bit encoding
+    const client = new ModbusClient()
+    let capturedFrame: Uint8Array | null = null
+
+    client.on('request', (frame: Uint8Array) => {
+      capturedFrame = frame
+    })
+
+    client.write({
+      address: 0x0013,
+      functionCode: 15,
+      slaveId: 1,
+      value: [1, 0, 1, 1, 0, 1, 0, 0, 1], // 9 bits = 2 bytes
+    })
+
+    expect(capturedFrame).not.toBeNull()
+    if (capturedFrame) {
+      // Frame: slave(1) + fc(1) + addr(2) + qty(2) + byteCount(1) + data(2) + crc(2) = 11 bytes
+      expect(capturedFrame.length).toBe(11)
+      expect(capturedFrame[0]).toBe(1) // slave ID
+      expect(capturedFrame[1]).toBe(15) // function code
+      expect(capturedFrame[2]).toBe(0x00) // address high
+      expect(capturedFrame[3]).toBe(0x13) // address low
+      expect(capturedFrame[4]).toBe(0x00) // quantity high
+      expect(capturedFrame[5]).toBe(0x09) // quantity low (9 coils)
+      expect(capturedFrame[6]).toBe(0x02) // byte count (2 bytes for 9 bits)
+      // Bit packing: [1,0,1,1,0,1,0,0] = 0x2D, [1] = 0x01
+      expect(capturedFrame[7]).toBe(0x2d) // first byte
+      expect(capturedFrame[8]).toBe(0x01) // second byte
+    }
+  })
+})

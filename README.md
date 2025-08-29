@@ -8,7 +8,8 @@ Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Ser
 
 - Runs 100% in the browser (no native installs) using Web Serial API
 - Supports Modbus RTU (basic ASCII placeholder handler present)
-- Single read (FC 01/02/03/04) & single write (FC 05/06) requests
+- Single read (FC 01/02/03/04) & write (FC 05/06) requests
+- Multi-write operations (FC 15/16) with array input validation
 - Periodic monitoring (polling) with adjustable interval in code (default 1000 ms)
 - Hex or decimal display toggle for register values & addresses
 - Real‑time communication log (TX/RX) with copy single / copy all and automatic trimming
@@ -18,7 +19,6 @@ Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Ser
 
 ## Roadmap Ideas (Not yet implemented)
 
-- Multi-coil (FC15) and multi-register (FC16) writes in UI
 - Better Modbus ASCII framing & LRC check
 - Saving / loading session profiles
 - Export logs / captured values to CSV
@@ -68,7 +68,10 @@ pnpm preview
 4. Press "Connect".
 5. For a single read: choose a function code (e.g. Holding Registers = FC03), start address, and quantity; click "Read".
 6. To start periodic polling: click "Start Monitor" (click again to stop). Default interval is 1000 ms; adjust in `App.tsx` or `modbus.ts` if needed.
-7. To write: select function (05 coil / 06 single register), address, and value (prefix with `0x` for hex) then click "Write".
+7. To write: 
+   - **Single writes (FC05/06)**: Select function (05 coil / 06 single register), address, and value (prefix with `0x` for hex) then click "Write".
+   - **Multi-coil writes (FC15)**: Select "15 - Write Multiple Coils", enter start address, and provide comma or space-separated coil values (0 or 1). Max 1968 coils.
+   - **Multi-register writes (FC16)**: Select "16 - Write Multiple Registers", enter start address, and provide comma/space/line-separated register values (0-65535). Max 123 registers.
 8. Toggle "Hex Display" to view values / addresses in hexadecimal.
 9. Use "Clear Logs" or "Copy All Logs" for log management; each log line also has an individual copy button.
 
@@ -108,8 +111,7 @@ The Web Serial API requires a user gesture to open a port; the page cannot acces
 
 ## Limitations
 
-- Only a subset of function codes parsed for response data (01/02 bits, 03/04 registers, 05/06 write echo).
-- No multi-write UI yet (15/16) though basic placeholders exist where appropriate.
+- Only a subset of function codes parsed for response data (01/02 bits, 03/04 registers, 05/06/15/16 write echo).
 - ASCII mode is a stub (frame detection simplified; no LRC validation currently).
 
 ## Project Scripts
