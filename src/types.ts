@@ -6,17 +6,23 @@ export interface SerialConfig {
   stopBits: 1 | 2
 }
 
+// Modbus function code type aliases
+export type ReadFunctionCode = 1 | 2 | 3 | 4
+export type WriteSingleFunctionCode = 5 | 6
+export type WriteMultiFunctionCode = 15 | 16
+export type WriteFunctionCode = WriteSingleFunctionCode | WriteMultiFunctionCode
+
 // Modbus related types
 export interface ModbusReadConfig {
   slaveId: number
-  functionCode: number
+  functionCode: ReadFunctionCode
   startAddress: number
   quantity: number
 }
 
 export interface ModbusWriteConfig {
   slaveId: number
-  functionCode: number
+  functionCode: WriteFunctionCode
   address: number
   value: number | number[]
 }

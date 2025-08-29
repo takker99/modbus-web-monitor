@@ -5,7 +5,9 @@ import type {
   ModbusReadConfig,
   ModbusResponse,
   ModbusWriteConfig,
+  ReadFunctionCode,
   SerialConfig,
+  WriteFunctionCode,
 } from './types.ts'
 
 export function App() {
@@ -36,13 +38,13 @@ export function App() {
   const [readConfig, setReadConfig] = useState<
     Omit<ModbusReadConfig, 'slaveId'>
   >({
-    functionCode: 3,
+    functionCode: 3 as ReadFunctionCode,
     quantity: 10,
     startAddress: 0,
   })
   const [writeConfig, setWriteConfig] = useState({
     address: 0,
-    functionCode: 6,
+    functionCode: 6 as WriteFunctionCode,
     value: '',
   })
 
@@ -426,7 +428,9 @@ export function App() {
                 onChange={(e) =>
                   setReadConfig((prev) => ({
                     ...prev,
-                    functionCode: Number(e.currentTarget.value),
+                    functionCode: Number(
+                      e.currentTarget.value
+                    ) as ReadFunctionCode,
                   }))
                 }
                 value={readConfig.functionCode}
@@ -507,7 +511,9 @@ export function App() {
                 onChange={(e) =>
                   setWriteConfig((prev) => ({
                     ...prev,
-                    functionCode: Number(e.currentTarget.value),
+                    functionCode: Number(
+                      e.currentTarget.value
+                    ) as WriteFunctionCode,
                   }))
                 }
                 value={writeConfig.functionCode}
