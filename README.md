@@ -7,19 +7,18 @@ Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Ser
 ## Features
 
 - Runs 100% in the browser (no native installs) using Web Serial API
-- Supports Modbus RTU (basic ASCII placeholder handler present)
+- Supports Modbus RTU and ASCII protocols with full framing validation
 - Single read (FC 01/02/03/04) & write (FC 05/06) requests
 - Multi-write operations (FC 15/16) with array input validation
 - Periodic monitoring (polling) with adjustable interval in code (default 1000 ms)
 - Hex or decimal display toggle for register values & addresses
 - Real‑time communication log (TX/RX) with copy single / copy all and automatic trimming
-- CRC16 (Modbus) validation for RTU frames
+- CRC16 (RTU) and LRC (ASCII) validation for frame integrity
 - Simple buffering & response correlation with timeout handling
 - Clean, responsive UI (desktop & mobile)
 
 ## Roadmap Ideas (Not yet implemented)
 
-- Better Modbus ASCII framing & LRC check
 - Saving / loading session profiles
 - Export logs / captured values to CSV
 - Custom polling interval in UI
@@ -31,7 +30,7 @@ Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Ser
 |-------|---------|---------------|
 | UI (React-like) | `src/App.tsx` | Preact component implementation of the full UI (current active path) |
 | Legacy DOM UI (non-Preact) | `src/ui.ts` + `src/main.ts` | Earlier vanilla DOM event driven UI (still present; not used when using `main.tsx`) |
-| Modbus protocol | `src/modbus.ts` | Building requests, parsing RTU responses, CRC, monitoring loop |
+| Modbus protocol | `src/modbus.ts` | Building requests, parsing RTU/ASCII responses, CRC/LRC validation, monitoring loop |
 | Serial abstraction | `src/serial.ts` | Web Serial API wrapper + event emitter |
 | Types | `src/types.ts` | Shared TypeScript interfaces |
 
@@ -112,6 +111,35 @@ Single register write (FC06):
 
 CRC16 polynomial 0xA001 (LSB first) is used. Exception responses are decoded with a basic Japanese->English translated map.
 
+## Modbus Frames (ASCII)
+
+ASCII frames are encoded in hexadecimal text format with start/end delimiters:
+
+```
+:AABBCCDDDD...EELR\r\n
+```
+
+Where:
+- `:` = Start character (0x3A)
+- `AA`, `BB`, etc. = Hexadecimal pairs representing data bytes (uppercase)
+- `LR` = LRC (Longitudinal Redundancy Check) as hex pair
+- `\r\n` = Termination (CR+LF, 0x0D 0x0A)
+
+**LRC Calculation:** `LRC = (256 - (sum of all data bytes % 256)) % 256`
+
+Example read request (FC03):
+```
+:01030000000AFB\r\n
+```
+- Slave: 01, Function: 03, Start: 0000, Quantity: 000A, LRC: FB
+
+The ASCII implementation handles:
+- Proper frame detection (`:` start, `\r\n` end)
+- Hex decoding with validation
+- LRC calculation and verification  
+- Buffer management for partial/concatenated frames
+- Error handling identical to RTU (LRC mismatch triggers error event)
+
 ## Error / Exception Handling
 
 - Pending request queue: only one outstanding at a time; attempts while busy reject.
@@ -126,7 +154,6 @@ The Web Serial API requires a user gesture to open a port; the page cannot acces
 ## Limitations
 
 - Only a subset of function codes parsed for response data (01/02 bits, 03/04 registers, 05/06/15/16 write echo).
-- ASCII mode is a stub (frame detection simplified; no LRC validation currently).
 
 ## Project Scripts
 
