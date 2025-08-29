@@ -83,6 +83,42 @@ pnpm preview
 
 ## Screenshots
 
+### FC01 - Read Coils Interface
+
+![FC01 Read Coils Interface](https://github.com/user-attachments/assets/fa75d17b-5d8e-486c-a885-b341abac9a11)
+
+The FC01 interface allows you to read multiple coils from the Modbus device. Enter the start address and quantity of coils to read. The response will show each coil as a bit value (0 or 1).
+
+### FC02 - Read Discrete Inputs Interface
+
+![FC02 Read Discrete Inputs Interface](https://github.com/user-attachments/assets/d37c245c-6a69-4fff-878d-518db38d2250)
+
+The FC02 interface allows you to read discrete inputs from the Modbus device. Similar to coils, but typically read-only status inputs. Enter the start address and quantity of discrete inputs to read.
+
+### FC03 - Read Holding Registers Interface
+
+![FC03 Read Holding Registers Interface](PLACEHOLDER_FC03_URL)
+
+The FC03 interface allows you to read holding registers from the Modbus device. These are typically read/write registers used for configuration and data storage. Enter the start address and quantity of registers to read.
+
+### FC04 - Read Input Registers Interface
+
+![FC04 Read Input Registers Interface](PLACEHOLDER_FC04_URL)
+
+The FC04 interface allows you to read input registers from the Modbus device. These are typically read-only registers containing measurement data or status information. Enter the start address and quantity of registers to read.
+
+### FC05 - Write Single Coil Interface
+
+![FC05 Write Single Coil Interface](PLACEHOLDER_FC05_URL)
+
+The FC05 interface allows you to write a single coil value. Enter the coil address and value (0 for OFF, 1 for ON). This is used for controlling individual digital outputs or control points.
+
+### FC06 - Write Single Register Interface
+
+![FC06 Write Single Register Interface](PLACEHOLDER_FC06_URL)
+
+The FC06 interface allows you to write a single register value. Enter the register address and value (0-65535). Supports hexadecimal values when hex display mode is enabled (prefix with 0x).
+
 ### FC15 - Write Multiple Coils Interface
 
 ![FC15 Multi-Coil Write Interface](https://github.com/user-attachments/assets/09eb3fe7-b5e3-4a14-b88d-ad65e82b701b)
