@@ -468,7 +468,8 @@ describe('Modbus ASCII', () => {
       })
 
       expect(requestData).not.toBeNull()
-      const requestString = String.fromCharCode(...requestData!)
+      if (!requestData) throw new Error('requestData is null')
+      const requestString = String.fromCharCode(...requestData)
 
       // Should be :AABBCCDDDDDDLR\r\n format
       // Expected: :010300000001FB\r\n
@@ -502,7 +503,8 @@ describe('Modbus ASCII', () => {
       })
 
       expect(requestData).not.toBeNull()
-      const requestString = String.fromCharCode(...requestData!)
+      if (!requestData) throw new Error('requestData is null')
+      const requestString = String.fromCharCode(...requestData)
 
       // Expected: :01050013FF00E8\r\n
       // slave=01, func=05, addr=0013, value=FF00, LRC=E8
