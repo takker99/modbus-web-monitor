@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useCallback, useEffect, useState } from 'preact/hooks'
 import { ModbusClient } from './modbus.ts'
 import { SerialManager } from './serial.ts'
 import type {
@@ -52,6 +52,119 @@ export function App() {
   // Instances (initialized via useEffect)
   const [serialManager] = useState(() => new SerialManager())
   const [modbusClient] = useState(() => new ModbusClient())
+
+  // Memoized event handlers
+  const handleBaudRateChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    setSerialConfig((prev: SerialConfig) => ({
+      ...prev,
+      baudRate: Number(target.value),
+    }))
+  }, [])
+
+  const handleDataBitsChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    setSerialConfig((prev: SerialConfig) => ({
+      ...prev,
+      dataBits: Number(target.value) as 7 | 8,
+    }))
+  }, [])
+
+  const handleParityChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    setSerialConfig((prev: SerialConfig) => ({
+      ...prev,
+      parity: target.value as 'none' | 'even' | 'odd',
+    }))
+  }, [])
+
+  const handleStopBitsChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    setSerialConfig((prev: SerialConfig) => ({
+      ...prev,
+      stopBits: Number(target.value) as 1 | 2,
+    }))
+  }, [])
+
+  const handleSlaveIdChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    setSlaveId(Number(target.value))
+  }, [])
+
+  const handleProtocolSelectChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    handleProtocolChange(target.value as 'rtu' | 'ascii')
+  }, [])
+
+  const handleReadFunctionCodeChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    const value = Number(target.value)
+    if (isReadFunctionCode(value)) {
+      setReadConfig((prev) => ({
+        ...prev,
+        functionCode: value,
+      }))
+    } else {
+      console.error('Invalid read function code:', value)
+    }
+  }, [])
+
+  const handleStartAddressChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    setReadConfig((prev) => ({
+      ...prev,
+      startAddress: Number(target.value),
+    }))
+  }, [])
+
+  const handleQuantityChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    setReadConfig((prev) => ({
+      ...prev,
+      quantity: Number(target.value),
+    }))
+  }, [])
+
+  const handleWriteFunctionCodeChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    const value = Number(target.value)
+    if (isWriteFunctionCode(value)) {
+      setWriteConfig((prev) => ({
+        ...prev,
+        functionCode: value,
+      }))
+    } else {
+      console.error('Invalid write function code:', value)
+    }
+  }, [])
+
+  const handleWriteAddressChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    setWriteConfig((prev) => ({
+      ...prev,
+      address: Number(target.value),
+    }))
+  }, [])
+
+  const handleWriteValueChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    setWriteConfig((prev) => ({
+      ...prev,
+      value: target.value,
+    }))
+  }, [])
+
+  const handleHexDisplayChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    setHexDisplay(target.checked)
+  }, [])
+
+  const handleCopyLogEntry = useCallback(
+    (log: { timestamp: string; type: string; message: string }) => {
+      copyLogEntry(log)
+    },
+    []
+  )
 
   useEffect(() => {
     // Web Serial API support check
@@ -314,12 +427,7 @@ export function App() {
               <select
                 disabled={isConnected}
                 id="baudRate"
-                onChange={(e) =>
-                  setSerialConfig((prev: SerialConfig) => ({
-                    ...prev,
-                    baudRate: Number(e.currentTarget.value),
-                  }))
-                }
+                onChange={handleBaudRateChange}
                 value={serialConfig.baudRate}
               >
                 <option value={9600}>9600</option>
@@ -335,12 +443,7 @@ export function App() {
               <select
                 disabled={isConnected}
                 id="dataBits"
-                onChange={(e) =>
-                  setSerialConfig((prev: SerialConfig) => ({
-                    ...prev,
-                    dataBits: Number(e.currentTarget.value) as 7 | 8,
-                  }))
-                }
+                onChange={handleDataBitsChange}
                 value={serialConfig.dataBits}
               >
                 <option value={7}>7</option>
@@ -353,12 +456,7 @@ export function App() {
               <select
                 disabled={isConnected}
                 id="parity"
-                onChange={(e) =>
-                  setSerialConfig((prev: SerialConfig) => ({
-                    ...prev,
-                    parity: e.currentTarget.value as 'none' | 'even' | 'odd',
-                  }))
-                }
+                onChange={handleParityChange}
                 value={serialConfig.parity}
               >
                 <option value="none">None</option>
@@ -372,12 +470,7 @@ export function App() {
               <select
                 disabled={isConnected}
                 id="stopBits"
-                onChange={(e) =>
-                  setSerialConfig((prev: SerialConfig) => ({
-                    ...prev,
-                    stopBits: Number(e.currentTarget.value) as 1 | 2,
-                  }))
-                }
+                onChange={handleStopBitsChange}
                 value={serialConfig.stopBits}
               >
                 <option value={1}>1</option>
@@ -394,7 +487,7 @@ export function App() {
                 id="slaveId"
                 max="247"
                 min="1"
-                onChange={(e) => setSlaveId(Number(e.currentTarget.value))}
+                onChange={handleSlaveIdChange}
                 type="number"
                 value={slaveId}
               />
@@ -405,9 +498,7 @@ export function App() {
               <select
                 disabled={isConnected}
                 id="protocol"
-                onChange={(e) =>
-                  handleProtocolChange(e.currentTarget.value as 'rtu' | 'ascii')
-                }
+                onChange={handleProtocolSelectChange}
                 value={protocol}
               >
                 <option value="rtu">Modbus RTU</option>
@@ -426,17 +517,7 @@ export function App() {
               <select
                 disabled={!isConnected}
                 id="readFunctionCode"
-                onChange={(e) => {
-                  const value = Number(e.currentTarget.value)
-                  if (isReadFunctionCode(value)) {
-                    setReadConfig((prev) => ({
-                      ...prev,
-                      functionCode: value,
-                    }))
-                  } else {
-                    console.error('Invalid read function code:', value)
-                  }
-                }}
+                onChange={handleReadFunctionCodeChange}
                 value={readConfig.functionCode}
               >
                 <option value={1}>01 - Read Coils</option>
@@ -453,12 +534,7 @@ export function App() {
                 id="startAddress"
                 max="65535"
                 min="0"
-                onChange={(e) =>
-                  setReadConfig((prev) => ({
-                    ...prev,
-                    startAddress: Number(e.currentTarget.value),
-                  }))
-                }
+                onChange={handleStartAddressChange}
                 type="number"
                 value={readConfig.startAddress}
               />
@@ -471,12 +547,7 @@ export function App() {
                 id="quantity"
                 max="125"
                 min="1"
-                onChange={(e) =>
-                  setReadConfig((prev) => ({
-                    ...prev,
-                    quantity: Number(e.currentTarget.value),
-                  }))
-                }
+                onChange={handleQuantityChange}
                 type="number"
                 value={readConfig.quantity}
               />
@@ -512,17 +583,7 @@ export function App() {
               <select
                 disabled={!isConnected}
                 id="writeFunctionCode"
-                onChange={(e) => {
-                  const value = Number(e.currentTarget.value)
-                  if (isWriteFunctionCode(value)) {
-                    setWriteConfig((prev) => ({
-                      ...prev,
-                      functionCode: value,
-                    }))
-                  } else {
-                    console.error('Invalid write function code:', value)
-                  }
-                }}
+                onChange={handleWriteFunctionCodeChange}
                 value={writeConfig.functionCode}
               >
                 <option value={5}>05 - Write Single Coil</option>
@@ -539,12 +600,7 @@ export function App() {
                 id="writeAddress"
                 max="65535"
                 min="0"
-                onChange={(e) =>
-                  setWriteConfig((prev) => ({
-                    ...prev,
-                    address: Number(e.currentTarget.value),
-                  }))
-                }
+                onChange={handleWriteAddressChange}
                 type="number"
                 value={writeConfig.address}
               />
@@ -555,12 +611,7 @@ export function App() {
               <input
                 disabled={!isConnected}
                 id="writeValue"
-                onChange={(e) =>
-                  setWriteConfig((prev) => ({
-                    ...prev,
-                    value: e.currentTarget.value,
-                  }))
-                }
+                onChange={handleWriteValueChange}
                 placeholder="e.g. 1234 or 0x04D2"
                 type="text"
                 value={writeConfig.value}
@@ -587,7 +638,7 @@ export function App() {
             <label>
               <input
                 checked={hexDisplay}
-                onChange={(e) => setHexDisplay(e.currentTarget.checked)}
+                onChange={handleHexDisplayChange}
                 type="checkbox"
               />{' '}
               Hex Display
@@ -651,7 +702,7 @@ export function App() {
                     <span className="log-data">{log.message}</span>
                     <button
                       className="log-copy-btn"
-                      onClick={() => copyLogEntry(log)}
+                      onClick={() => handleCopyLogEntry(log)}
                       title="Copy this log"
                       type="button"
                     >
