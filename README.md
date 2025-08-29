@@ -97,25 +97,25 @@ The FC02 interface allows you to read discrete inputs from the Modbus device. Si
 
 ### FC03 - Read Holding Registers Interface
 
-![FC03 Read Holding Registers Interface](PLACEHOLDER_FC03_URL)
+![FC03 Read Holding Registers Interface](https://github.com/user-attachments/assets/83161f44-ccaa-4edb-a6dd-6c37197c81c2)
 
 The FC03 interface allows you to read holding registers from the Modbus device. These are typically read/write registers used for configuration and data storage. Enter the start address and quantity of registers to read.
 
 ### FC04 - Read Input Registers Interface
 
-![FC04 Read Input Registers Interface](PLACEHOLDER_FC04_URL)
+![FC04 Read Input Registers Interface](https://github.com/user-attachments/assets/2778c198-1487-4dbf-aa73-27651767e799)
 
 The FC04 interface allows you to read input registers from the Modbus device. These are typically read-only registers containing measurement data or status information. Enter the start address and quantity of registers to read.
 
 ### FC05 - Write Single Coil Interface
 
-![FC05 Write Single Coil Interface](PLACEHOLDER_FC05_URL)
+![FC05 Write Single Coil Interface](https://github.com/user-attachments/assets/7a0d0cee-5214-4d74-83d4-153bcfdef07d)
 
 The FC05 interface allows you to write a single coil value. Enter the coil address and value (0 for OFF, 1 for ON). This is used for controlling individual digital outputs or control points.
 
 ### FC06 - Write Single Register Interface
 
-![FC06 Write Single Register Interface](PLACEHOLDER_FC06_URL)
+![FC06 Write Single Register Interface](https://github.com/user-attachments/assets/353fb842-a6e1-4c34-95ee-1565bbb06e82)
 
 The FC06 interface allows you to write a single register value. Enter the register address and value (0-65535). Supports hexadecimal values when hex display mode is enabled (prefix with 0x).
 
