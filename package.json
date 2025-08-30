@@ -34,7 +34,9 @@
     "fix": "biome check --fix && tsgo",
     "fix:unsafe": "biome check --fix --unsafe && tsgo",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest"
   },
   "type": "module",
   "version": "1.0.0"

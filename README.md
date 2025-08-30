@@ -239,6 +239,54 @@ The Web Serial API requires a user gesture to open a port; the page cannot acces
 | `pnpm preview` | Preview built assets |
 | `pnpm check` | Lint & TS (biome + tsgo) |
 | `pnpm fix` | Auto-fix issues |
+| `pnpm test` | Run all tests |
+| `pnpm test:coverage` | Run tests with coverage report |
+| `pnpm test:watch` | Run tests in watch mode |
+
+## Testing
+
+This project has comprehensive test coverage for the Modbus protocol implementation with focus on reliability and edge case handling.
+
+### Test Categories
+
+- **Unit Tests** (`test/modbus.test.ts`) - Core protocol functionality, CRC/LRC calculations, frame building
+- **Fuzzing Tests** (`test/modbus-fuzzing.test.ts`) - Property-based testing with random frame generation 
+- **Timing Tests** (`test/modbus-timing.test.ts`) - Timeout handling, race conditions, overlapping requests
+- **UI Tests** (`test/ui-parsing.test.ts`) - Input validation and parsing logic
+
+### Coverage Requirements
+
+- **Statements**: 90% (currently 93.64%)
+- **Branches**: 85% (currently 87.96%) 
+- **Lines**: 90% (currently 93.64%)
+- **Functions**: 90% (currently 100%)
+
+### Running Tests
+
+```bash
+# Run all tests
+pnpm test
+
+# Run tests with coverage report
+pnpm test:coverage
+
+# Run tests in watch mode for development
+pnpm test:watch
+
+# Run specific test file
+pnpm test test/modbus.test.ts
+```
+
+### Test Features
+
+- **Property-based testing** with fast-check for robust frame validation
+- **Fake timers** for deterministic timeout testing  
+- **Frame fuzzing** with up to 200 random corrupted frames per test
+- **Buffer boundary testing** with frame chunking scenarios
+- **ASCII and RTU protocol coverage** including error paths
+- **Race condition prevention** testing for concurrent requests
+
+The test suite validates that the Modbus implementation handles malformed frames gracefully without crashes and properly manages request timeouts and overlapping requests.
 
 ## Contributing
 
