@@ -297,6 +297,36 @@ The ASCII implementation handles:
 4. **Check wiring** - Verify RS-485 A/B wiring polarity and termination resistors
 5. **Monitor traffic** - Use the communication log to verify frames are being sent correctly
 
+### Buffer Resynchronization and Noise Handling
+
+**Problem:** Corrupted frames or electrical noise causing communication errors.
+
+**Symptoms:**
+- "CRC error" messages in communication log
+- Intermittent communication failures
+- Valid responses occasionally missed after noise events
+
+**How it works:**
+The application includes intelligent buffer resynchronization for RTU protocol:
+- When a CRC error occurs, the system doesn't immediately clear the entire buffer
+- Instead, it scans for the next plausible frame start (valid slave ID 1-247 + function code)
+- If a candidate frame is found, the buffer advances to that position
+- If no valid frame is detected, falls back to complete buffer reset
+- This allows recovery of valid frames that follow corrupted data
+
+**Supported frame detection:**
+- Valid slave IDs: 1-247 (0x01-0xF7)
+- Function codes: 1, 2, 3, 4, 5, 6, 15, 16
+- Exception responses: 0x81-0x86, 0x8F, 0x90
+
+**Resolution:**
+1. **Check cable quality** - Use shielded cables for long runs or noisy environments
+2. **Verify grounding** - Ensure proper grounding of RS-485 network
+3. **Check termination** - Add 120Ω termination resistors at both ends of RS-485 bus
+4. **Reduce noise sources** - Keep communication cables away from power lines and motors
+5. **Lower baud rate** - Reduce communication speed if errors persist
+6. **Use ASCII mode** - Consider ASCII protocol for extremely noisy environments (slower but more robust)
+
 ## Security Notes
 
 The Web Serial API requires a user gesture to open a port; the page cannot access serial devices silently. All communication happens locally; no data leaves the browser unless you manually copy it.
