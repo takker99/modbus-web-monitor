@@ -356,13 +356,16 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     const frameBytes: number[] = []
     for (let i = 0; i < hexString.length; i += 2) {
       const hexPair = hexString.substring(i, i + 2)
-      const byte = parseInt(hexPair, 16)
-      if (Number.isNaN(byte)) {
+
+      // Validate that both characters are valid hex digits
+      if (!/^[0-9A-Fa-f]{2}$/.test(hexPair)) {
         this.handleError(
           new Error(`Invalid hex pair in ASCII frame: ${hexPair}`)
         )
         return
       }
+
+      const byte = parseInt(hexPair, 16)
       frameBytes.push(byte)
     }
 
