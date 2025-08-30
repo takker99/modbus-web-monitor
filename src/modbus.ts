@@ -21,6 +21,15 @@ export function calculateCRC16(data: number[]): number {
   return crc
 }
 
+// LRC (Longitudinal Redundancy Check) calculation for Modbus ASCII (exported for tests)
+export function calculateLRC(data: number[]): number {
+  let lrc = 0
+  for (const byte of data) {
+    lrc += byte
+  }
+  return (256 - (lrc % 256)) % 256
+}
+
 // Event types for ModbusClient
 type ModbusClientEvents = {
   response: [ModbusResponse]
@@ -40,6 +49,9 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   } | null = null
   private monitoringInterval: ReturnType<typeof setInterval> | null = null
   private buffer: number[] = []
+  // ASCII state tracking
+  private asciiBuffer: string = ''
+  private asciiFrameStarted = false
 
   setProtocol(protocol: 'rtu' | 'ascii') {
     this.protocol = protocol
@@ -67,7 +79,10 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
       this.emit('request', request)
 
       // 既にバッファ内に対象スレーブのレスポンスが残っている（連結フレーム等）場合の即時再解析
-      if (this.buffer.length > 0) {
+      if (
+        this.buffer.length > 0 ||
+        (this.protocol === 'ascii' && this.asciiBuffer.length > 0)
+      ) {
         if (this.protocol === 'rtu') {
           this.handleRTUResponse()
         } else {
@@ -201,13 +216,156 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   }
 
   private handleASCIIResponse() {
-    // Simplified ASCII implementation
-    // Real implementation would detect ':' start and CR+LF end
-    const frame = this.buffer
-    if (frame.length >= 7) {
-      // 最小フレーム長
-      this.processValidResponse(frame.length)
+    // Convert buffer to string to look for ASCII frame markers
+    const newData = String.fromCharCode(...this.buffer)
+    this.asciiBuffer += newData
+    this.buffer = [] // Clear the buffer as we've moved data to asciiBuffer
+
+    // Process only one complete frame at a time (like RTU mode)
+    // Look for start of frame ':'
+    if (!this.asciiFrameStarted) {
+      const startIndex = this.asciiBuffer.indexOf(':')
+      if (startIndex === -1) {
+        // No start found, keep waiting
+        return
+      }
+      // Remove everything before ':'
+      this.asciiBuffer = this.asciiBuffer.substring(startIndex)
+      this.asciiFrameStarted = true
     }
+
+    // Look for end of frame \r\n
+    const endIndex = this.asciiBuffer.indexOf('\r\n')
+    if (endIndex === -1) {
+      // Frame not complete yet
+      return
+    }
+
+    // Extract complete frame (including : but excluding \r\n)
+    const frameString = this.asciiBuffer.substring(0, endIndex)
+    this.asciiBuffer = this.asciiBuffer.substring(endIndex + 2)
+    this.asciiFrameStarted = false
+
+    // Parse the frame
+    this.parseASCIIFrame(frameString)
+  }
+
+  private parseASCIIFrame(frameString: string) {
+    // Frame should start with ':' and contain hex pairs
+    if (frameString.length < 3 || frameString[0] !== ':') {
+      this.handleError(new Error('Invalid ASCII frame format'))
+      return
+    }
+
+    // Remove the ':' and parse hex pairs
+    const hexString = frameString.substring(1)
+    if (hexString.length % 2 !== 0) {
+      this.handleError(
+        new Error('ASCII frame contains odd number of hex characters')
+      )
+      return
+    }
+
+    // Convert hex pairs to bytes
+    const frameBytes: number[] = []
+    for (let i = 0; i < hexString.length; i += 2) {
+      const hexPair = hexString.substring(i, i + 2)
+      const byte = parseInt(hexPair, 16)
+      if (Number.isNaN(byte)) {
+        this.handleError(
+          new Error(`Invalid hex pair in ASCII frame: ${hexPair}`)
+        )
+        return
+      }
+      frameBytes.push(byte)
+    }
+
+    // Need at least slave + function + LRC = 3 bytes
+    if (frameBytes.length < 3) {
+      this.handleError(new Error('ASCII frame too short'))
+      return
+    }
+
+    // Extract LRC (last byte) and message (all but last byte)
+    const receivedLRC = frameBytes[frameBytes.length - 1]
+    const messageBytes = frameBytes.slice(0, -1)
+    const calculatedLRC = calculateLRC(messageBytes)
+
+    if (receivedLRC !== calculatedLRC) {
+      this.handleError(new Error('LRC error'))
+      return
+    }
+
+    // Validate against pending request
+    if (!this.pendingRequest) {
+      return
+    }
+
+    const slaveId = messageBytes[0]
+    const functionCode = messageBytes[1]
+
+    if (
+      this.pendingRequest.slaveId !== slaveId ||
+      !(
+        this.pendingRequest.functionCode === functionCode ||
+        (functionCode & 0x80 &&
+          (functionCode & 0x7f) === this.pendingRequest.functionCode)
+      )
+    ) {
+      return
+    }
+
+    // Handle exception frame (function | 0x80)
+    if (functionCode & 0x80) {
+      if (messageBytes.length < 3) {
+        this.handleError(new Error('Invalid exception frame length'))
+        return
+      }
+      const errorCode = messageBytes[2]
+      this.handleError(errorCode)
+      return
+    }
+
+    // Process valid response - reuse existing RTU logic by simulating RTU frame
+    // Convert ASCII frame back to RTU format for existing processing logic
+    this.processValidASCIIResponse(messageBytes)
+  }
+
+  private processValidASCIIResponse(messageBytes: number[]) {
+    if (!this.pendingRequest) return
+
+    const slaveId = messageBytes[0]
+    const functionCode = messageBytes[1]
+
+    const data: number[] = []
+    if (functionCode === 3 || functionCode === 4) {
+      // Register read response
+      const dataLength = messageBytes[2]
+      for (let i = 0; i < dataLength; i += 2) {
+        const value = (messageBytes[3 + i] << 8) | messageBytes[3 + i + 1]
+        data.push(value)
+      }
+    } else if (functionCode === 1 || functionCode === 2) {
+      // Coil/input status read response
+      const dataLength = messageBytes[2]
+      for (let i = 0; i < dataLength; i++) {
+        const byte = messageBytes[3 + i]
+        for (let bit = 0; bit < 8; bit++) {
+          data.push((byte >> bit) & 1)
+        }
+      }
+    }
+
+    const modbusResponse: ModbusResponse = {
+      data,
+      functionCode,
+      slaveId,
+      timestamp: new Date(),
+    }
+
+    clearTimeout(this.pendingRequest.timeout)
+    this.pendingRequest.resolve(modbusResponse)
+    this.pendingRequest = null
   }
 
   private processValidResponse(responseLength: number) {
@@ -291,9 +449,21 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     if (this.protocol === 'rtu') {
       const crcValue = calculateCRC16(request)
       request.push(crcValue & 0xff, (crcValue >> 8) & 0xff)
-    }
+      return new Uint8Array(request)
+    } else {
+      // ASCII mode: format as :AABBCC...DDLR\r\n
+      const lrcValue = calculateLRC(request)
+      request.push(lrcValue)
 
-    return new Uint8Array(request)
+      // Convert to ASCII hex format
+      const hexString = request
+        .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
+        .join('')
+
+      // Create ASCII frame: : + hex data + \r\n
+      const asciiFrame = `:${hexString}\r\n`
+      return new Uint8Array(Array.from(asciiFrame).map((c) => c.charCodeAt(0)))
+    }
   }
 
   private buildWriteRequest(config: ModbusWriteConfig): Uint8Array {
@@ -372,8 +542,20 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     if (this.protocol === 'rtu') {
       const crcValue = calculateCRC16(request)
       request.push(crcValue & 0xff, (crcValue >> 8) & 0xff)
-    }
+      return new Uint8Array(request)
+    } else {
+      // ASCII mode: format as :AABBCC...DDLR\r\n
+      const lrcValue = calculateLRC(request)
+      request.push(lrcValue)
 
-    return new Uint8Array(request)
+      // Convert to ASCII hex format
+      const hexString = request
+        .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
+        .join('')
+
+      // Create ASCII frame: : + hex data + \r\n
+      const asciiFrame = `:${hexString}\r\n`
+      return new Uint8Array(Array.from(asciiFrame).map((c) => c.charCodeAt(0)))
+    }
   }
 }

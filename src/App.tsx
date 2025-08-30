@@ -315,7 +315,6 @@ export function App() {
     const target = e.currentTarget as HTMLInputElement
     setHexDisplay(target.checked)
   }, [])
-
   // Helper functions for multi-write operations
   const parseCoilValues = (input: string): number[] => {
     // Parse comma-separated or space-separated bits (0/1)
