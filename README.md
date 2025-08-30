@@ -244,6 +244,59 @@ The ASCII implementation handles:
 - On Modbus exception (function | 0x80), the code is mapped and surfaced in logs.
 - CRC mismatch triggers an error and buffer reset for that frame.
 
+## Troubleshooting
+
+### Port Disconnection Issues
+
+**Problem:** Serial port becomes unexpectedly disconnected during operation.
+
+**Common Causes:**
+- **Cable/adapter unplugged** - Physical disconnection of USB-to-serial adapter
+- **Browser permission revocation** - User or browser policy revoked serial port access
+- **Device power loss** - Target Modbus device lost power or reset
+- **Driver issues** - USB serial driver problems or conflicts
+
+**Symptoms:**
+- Orange warning banner appears: "Port Disconnected"
+- Communication log shows "Serial port disconnected unexpectedly"
+- Connection status changes to "Disconnected"
+
+**Resolution:**
+1. **Check physical connections** - Ensure USB cable and serial connections are secure
+2. **Use the Reconnect button** - Click the "Reconnect" button in the disconnect banner
+3. **Refresh browser permissions** - If reconnection fails, refresh the page and re-select the port
+4. **Check device status** - Verify the target Modbus device is powered and responsive
+5. **Try different USB port** - Switch to a different USB port if using a USB-to-serial adapter
+
+### Connection Permission Issues
+
+**Problem:** Browser denies access to serial ports.
+
+**Symptoms:**
+- "Port selection error" when clicking "Select Port"
+- Browser doesn't show the port selection dialog
+
+**Resolution:**
+1. **Check browser compatibility** - Use Chrome 89+ or Edge 89+
+2. **Enable secure context** - Ensure using HTTPS or localhost
+3. **Check browser permissions** - Go to browser settings and check site permissions
+4. **Clear browser data** - Clear site data and cookies, then try again
+
+### General Communication Issues
+
+**Problem:** No response from Modbus device or timeout errors.
+
+**Symptoms:**
+- "Request timed out" errors in communication log
+- No response data received after sending commands
+
+**Resolution:**
+1. **Verify serial settings** - Check baud rate, data bits, parity, and stop bits match device
+2. **Check slave ID** - Ensure the configured slave ID matches the device
+3. **Test with simple reads** - Start with basic function codes (FC03) on known registers
+4. **Check wiring** - Verify RS-485 A/B wiring polarity and termination resistors
+5. **Monitor traffic** - Use the communication log to verify frames are being sent correctly
+
 ## Security Notes
 
 The Web Serial API requires a user gesture to open a port; the page cannot access serial devices silently. All communication happens locally; no data leaves the browser unless you manually copy it.

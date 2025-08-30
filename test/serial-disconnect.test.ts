@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SerialManager } from '../src/serial.ts'
 
 // Mock Web Serial API
@@ -13,19 +13,19 @@ class MockSerialPort {
     if (!this.isOpen) return null
     this.mockReader = new MockReader(this.readerController)
     return {
-      getReader: () => this.mockReader
-    } as any
+      getReader: () => this.mockReader,
+    } as ReadableStream<Uint8Array>
   }
 
   get writable() {
     if (!this.isOpen) return null
     this.mockWriter = new MockWriter(this.writerController)
     return {
-      getWriter: () => this.mockWriter
-    } as any
+      getWriter: () => this.mockWriter,
+    } as WritableStream<Uint8Array>
   }
 
-  async open(_config: any) {
+  async open(_config: SerialOptions) {
     if (this.isOpen) throw new Error('Port already open')
     this.isOpen = true
   }
@@ -70,13 +70,13 @@ class MockReader {
     }
 
     // Simulate a delay then return some data
-    await new Promise(resolve => setTimeout(resolve, 10))
-    
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
     if (this.controller.signal.aborted) {
       throw new Error('Reader cancelled')
     }
 
-    return { value: new Uint8Array([1, 2, 3]), done: false }
+    return { done: false, value: new Uint8Array([1, 2, 3]) }
   }
 
   async cancel() {
@@ -123,8 +123,8 @@ class MockWriter {
 // Mock navigator.serial
 const mockNavigator = {
   serial: {
-    requestPort: vi.fn()
-  }
+    requestPort: vi.fn(),
+  },
 }
 
 describe('SerialManager Disconnect Handling', () => {
@@ -134,10 +134,10 @@ describe('SerialManager Disconnect Handling', () => {
   beforeEach(() => {
     // Setup navigator mock
     vi.stubGlobal('navigator', mockNavigator)
-    
+
     serialManager = new SerialManager()
     mockPort = new MockSerialPort()
-    mockNavigator.serial.requestPort.mockResolvedValue(mockPort as any)
+    mockNavigator.serial.requestPort.mockResolvedValue(mockPort as SerialPort)
   })
 
   afterEach(() => {
@@ -146,8 +146,8 @@ describe('SerialManager Disconnect Handling', () => {
   })
 
   it('should detect unexpected disconnect when read stream ends', async () => {
-    const portDisconnectedEvents: any[] = []
-    const disconnectedEvents: any[] = []
+    const portDisconnectedEvents: boolean[] = []
+    const disconnectedEvents: boolean[] = []
 
     serialManager.on('portDisconnected', () => {
       portDisconnectedEvents.push(true)
@@ -163,7 +163,7 @@ describe('SerialManager Disconnect Handling', () => {
       baudRate: 9600,
       dataBits: 8,
       parity: 'none',
-      stopBits: 1
+      stopBits: 1,
     })
 
     expect(serialManager.connected).toBe(true)
@@ -172,7 +172,7 @@ describe('SerialManager Disconnect Handling', () => {
     mockPort.simulateDisconnect()
 
     // Wait for the read loop to detect the disconnect
-    await new Promise(resolve => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, 50))
 
     expect(portDisconnectedEvents).toHaveLength(1)
     expect(disconnectedEvents).toHaveLength(0) // Should NOT emit regular disconnect
@@ -180,8 +180,8 @@ describe('SerialManager Disconnect Handling', () => {
   })
 
   it('should handle read errors that indicate disconnection', async () => {
-    const portDisconnectedEvents: any[] = []
-    const errorEvents: any[] = []
+    const portDisconnectedEvents: boolean[] = []
+    const errorEvents: Error[] = []
 
     serialManager.on('portDisconnected', () => {
       portDisconnectedEvents.push(true)
@@ -197,14 +197,14 @@ describe('SerialManager Disconnect Handling', () => {
       baudRate: 9600,
       dataBits: 8,
       parity: 'none',
-      stopBits: 1
+      stopBits: 1,
     })
 
     // Simulate a disconnection error
     mockPort.simulateReadError(new Error('Device disconnected'))
 
     // Wait for error to be processed
-    await new Promise(resolve => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, 50))
 
     expect(portDisconnectedEvents).toHaveLength(1)
     expect(errorEvents).toHaveLength(0) // Should NOT emit generic error for disconnect
@@ -212,8 +212,8 @@ describe('SerialManager Disconnect Handling', () => {
   })
 
   it('should handle non-disconnect read errors normally', async () => {
-    const portDisconnectedEvents: any[] = []
-    const errorEvents: any[] = []
+    const portDisconnectedEvents: boolean[] = []
+    const errorEvents: Error[] = []
 
     serialManager.on('portDisconnected', () => {
       portDisconnectedEvents.push(true)
@@ -229,14 +229,14 @@ describe('SerialManager Disconnect Handling', () => {
       baudRate: 9600,
       dataBits: 8,
       parity: 'none',
-      stopBits: 1
+      stopBits: 1,
     })
 
     // Simulate a non-disconnect error
     mockPort.simulateReadError(new Error('Invalid data format'))
 
     // Wait for error to be processed
-    await new Promise(resolve => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, 50))
 
     expect(portDisconnectedEvents).toHaveLength(0) // Should NOT trigger disconnect
     expect(errorEvents).toHaveLength(1) // Should emit generic error
@@ -244,7 +244,7 @@ describe('SerialManager Disconnect Handling', () => {
   })
 
   it('should allow safe idempotent disconnection', async () => {
-    const disconnectedEvents: any[] = []
+    const disconnectedEvents: boolean[] = []
 
     serialManager.on('disconnected', () => {
       disconnectedEvents.push(true)
@@ -256,7 +256,7 @@ describe('SerialManager Disconnect Handling', () => {
       baudRate: 9600,
       dataBits: 8,
       parity: 'none',
-      stopBits: 1
+      stopBits: 1,
     })
 
     // Disconnect multiple times should be safe
@@ -271,8 +271,8 @@ describe('SerialManager Disconnect Handling', () => {
   })
 
   it('should support reconnection after unexpected disconnect', async () => {
-    const connectedEvents: any[] = []
-    const portDisconnectedEvents: any[] = []
+    const connectedEvents: boolean[] = []
+    const portDisconnectedEvents: boolean[] = []
 
     serialManager.on('connected', () => {
       connectedEvents.push(true)
@@ -288,14 +288,14 @@ describe('SerialManager Disconnect Handling', () => {
       baudRate: 9600,
       dataBits: 8,
       parity: 'none',
-      stopBits: 1
+      stopBits: 1,
     })
 
     expect(connectedEvents).toHaveLength(1)
 
     // Simulate disconnect
     mockPort.simulateDisconnect()
-    await new Promise(resolve => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, 50))
 
     expect(portDisconnectedEvents).toHaveLength(1)
     expect(serialManager.connected).toBe(false)
@@ -305,7 +305,7 @@ describe('SerialManager Disconnect Handling', () => {
       baudRate: 9600,
       dataBits: 8,
       parity: 'none',
-      stopBits: 1
+      stopBits: 1,
     })
 
     expect(connectedEvents).toHaveLength(2)
@@ -314,11 +314,13 @@ describe('SerialManager Disconnect Handling', () => {
 
   it('should handle reconnection when no port is available', async () => {
     // Don't select a port first
-    await expect(serialManager.reconnect({
-      baudRate: 9600,
-      dataBits: 8,
-      parity: 'none',
-      stopBits: 1
-    })).rejects.toThrow('No port available for reconnection')
+    await expect(
+      serialManager.reconnect({
+        baudRate: 9600,
+        dataBits: 8,
+        parity: 'none',
+        stopBits: 1,
+      })
+    ).rejects.toThrow('No port available for reconnection')
   })
 })
