@@ -70,6 +70,40 @@ export function parseRegisterResponse(
   return data
 }
 
+// Utility function to check if a byte sequence looks like a valid Modbus RTU frame start
+export function isPlausibleFrameStart(
+  buffer: number[],
+  startIndex: number
+): boolean {
+  if (startIndex >= buffer.length) return false
+
+  const slaveId = buffer[startIndex]
+  const functionCode = buffer[startIndex + 1] || 0
+
+  // Valid slave ID range: 1-247 (0x01-0xF7)
+  if (slaveId < 1 || slaveId > 247) return false
+
+  // Valid function codes: 1-6, 15-16, or exception responses (0x81-0x86, 0x8F, 0x90)
+  const validFunctionCodes = [1, 2, 3, 4, 5, 6, 15, 16]
+  const isValidFunction = validFunctionCodes.includes(functionCode)
+  const isException =
+    (functionCode & 0x80) !== 0 &&
+    validFunctionCodes.includes(functionCode & 0x7f)
+
+  return isValidFunction || isException
+}
+
+// Find the next plausible frame start position in buffer for resynchronization
+export function findFrameResyncPosition(buffer: number[]): number {
+  // Start scanning from position 1 (skip current corrupted frame start)
+  for (let i = 1; i < buffer.length - 1; i++) {
+    if (isPlausibleFrameStart(buffer, i)) {
+      return i
+    }
+  }
+  return -1 // No candidate found
+}
+
 // Event types for ModbusClient
 type ModbusClientEvents = {
   response: [ModbusResponse]
@@ -187,72 +221,84 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   }
 
   private handleRTUResponse() {
-    // Minimum RTU response length is 5 bytes (slaveID + function + data length + CRC)
-    if (this.buffer.length < 5) return
+    while (this.buffer.length >= 5) {
+      const slaveId = this.buffer[0]
+      const functionCode = this.buffer[1]
 
-    const slaveId = this.buffer[0]
-    const functionCode = this.buffer[1]
+      // Check if this frame matches our pending request
+      const isMatchingFrame =
+        this.pendingRequest &&
+        this.pendingRequest.slaveId === slaveId &&
+        // 許可: 通常関数コード または 例外フレーム(function | 0x80)
+        (this.pendingRequest.functionCode === functionCode ||
+          (functionCode & 0x80 &&
+            (functionCode & 0x7f) === this.pendingRequest.functionCode))
 
-    if (
-      !this.pendingRequest ||
-      this.pendingRequest.slaveId !== slaveId ||
-      // 許可: 通常関数コード または 例外フレーム(function | 0x80)
-      !(
-        this.pendingRequest.functionCode === functionCode ||
-        (functionCode & 0x80 &&
-          (functionCode & 0x7f) === this.pendingRequest.functionCode)
-      )
-    ) {
-      return
-    }
+      if (!isMatchingFrame) {
+        // If we have a pending request but frame doesn't match, try to advance buffer
+        if (this.pendingRequest) {
+          const resyncPosition = findFrameResyncPosition(this.buffer)
+          if (resyncPosition !== -1) {
+            this.buffer = this.buffer.slice(resyncPosition)
+            continue // Try again with advanced buffer
+          } else {
+            // No valid frame found, just advance by 1 byte and try again
+            this.buffer = this.buffer.slice(1)
+            continue
+          }
+        }
+        return
+      }
 
-    // Error response check (exception frame length = 5 bytes: slave + fc + ex + CRC2)
-    if (functionCode & 0x80) {
-      if (this.buffer.length < 5) return
-      const messageWithoutCRC = this.buffer.slice(0, 3)
-      const receivedCRC = (this.buffer[4] << 8) | this.buffer[3]
+      // Error response check (exception frame length = 5 bytes: slave + fc + ex + CRC2)
+      if (functionCode & 0x80) {
+        if (this.buffer.length < 5) return
+        const messageWithoutCRC = this.buffer.slice(0, 3)
+        const receivedCRC = (this.buffer[4] << 8) | this.buffer[3]
+        const calculatedCRC = calculateCRC16(messageWithoutCRC)
+        if (receivedCRC !== calculatedCRC) {
+          this.handleError(new Error('CRC error'))
+          return
+        }
+        const errorCode = this.buffer[2]
+        this.handleError(errorCode)
+        // 例外フレーム消費
+        this.buffer = this.buffer.slice(5)
+        return
+      }
+
+      let responseLength: number
+      if (
+        functionCode === 1 ||
+        functionCode === 2 ||
+        functionCode === 3 ||
+        functionCode === 4
+      ) {
+        // Read function
+        const dataLength = this.buffer[2]
+        responseLength = 3 + dataLength + 2 // slaveID + function + byte count + data + CRC
+      } else {
+        // Write function
+        responseLength = 8 // fixed length
+      }
+
+      if (this.buffer.length < responseLength) return
+
+      // CRC check
+      const messageWithoutCRC = this.buffer.slice(0, responseLength - 2)
+      const receivedCRC =
+        (this.buffer[responseLength - 1] << 8) | this.buffer[responseLength - 2]
       const calculatedCRC = calculateCRC16(messageWithoutCRC)
+
       if (receivedCRC !== calculatedCRC) {
         this.handleError(new Error('CRC error'))
         return
       }
-      const errorCode = this.buffer[2]
-      this.handleError(errorCode)
-      // 例外フレーム消費
-      this.buffer = this.buffer.slice(5)
+
+      // Process response
+      this.processValidResponse(responseLength)
       return
     }
-
-    let responseLength: number
-    if (
-      functionCode === 1 ||
-      functionCode === 2 ||
-      functionCode === 3 ||
-      functionCode === 4
-    ) {
-      // Read function
-      const dataLength = this.buffer[2]
-      responseLength = 3 + dataLength + 2 // slaveID + function + byte count + data + CRC
-    } else {
-      // Write function
-      responseLength = 8 // fixed length
-    }
-
-    if (this.buffer.length < responseLength) return
-
-    // CRC check
-    const messageWithoutCRC = this.buffer.slice(0, responseLength - 2)
-    const receivedCRC =
-      (this.buffer[responseLength - 1] << 8) | this.buffer[responseLength - 2]
-    const calculatedCRC = calculateCRC16(messageWithoutCRC)
-
-    if (receivedCRC !== calculatedCRC) {
-      this.handleError(new Error('CRC error'))
-      return
-    }
-
-    // Process response
-    this.processValidResponse(responseLength)
   }
 
   private handleASCIIResponse() {
@@ -437,7 +483,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     this.buffer = this.buffer.slice(responseLength)
   }
 
-  private handleError(error: number | Error) {
+  private handleError(error: number | Error, attemptResync = true) {
     if (!this.pendingRequest) return
 
     clearTimeout(this.pendingRequest.timeout)
@@ -461,7 +507,21 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     }
 
     this.pendingRequest = null
-    this.buffer = []
+
+    // Attempt buffer resynchronization for RTU protocol
+    if (attemptResync && this.protocol === 'rtu' && this.buffer.length > 0) {
+      const resyncPosition = findFrameResyncPosition(this.buffer)
+      if (resyncPosition !== -1) {
+        // Found a potential frame start, advance buffer to that position
+        this.buffer = this.buffer.slice(resyncPosition)
+      } else {
+        // No candidate found, clear buffer completely
+        this.buffer = []
+      }
+    } else {
+      // For ASCII or when resync disabled, clear buffer completely
+      this.buffer = []
+    }
   }
 
   private buildReadRequest(config: ModbusReadConfig): Uint8Array {
