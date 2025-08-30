@@ -44,7 +44,7 @@ Coverage reports include:
 - Saving / loading session profiles
 - Export logs / captured values to CSV
 - Custom polling interval in UI
-- Support for additional function codes & exception decoding table improvements
+- Advanced diagnostics functions (FC08+) and extended exception decoding
 
 ## Architecture Overview
 
@@ -248,9 +248,33 @@ The ASCII implementation handles:
 
 The Web Serial API requires a user gesture to open a port; the page cannot access serial devices silently. All communication happens locally; no data leaves the browser unless you manually copy it.
 
+## Supported Function Codes
+
+This application provides full support for standard Modbus read and write operations with proper type differentiation:
+
+### Read Operations
+- **FC01 - Read Coils**: Digital outputs/coils status (read/write bits)
+- **FC02 - Read Discrete Inputs**: Digital inputs status (read-only bits)  
+- **FC03 - Read Holding Registers**: Analog/data registers (read/write registers)
+- **FC04 - Read Input Registers**: Input/measurement registers (read-only registers)
+
+### Write Operations
+- **FC05 - Write Single Coil**: Write single digital output
+- **FC06 - Write Single Register**: Write single analog/data register  
+- **FC15 - Write Multiple Coils**: Write multiple digital outputs (up to 1968 coils)
+- **FC16 - Write Multiple Registers**: Write multiple registers (up to 123 registers)
+
+### Enhanced Features
+- **Function code labeling**: UI displays specific types (Coils, Discrete Inputs, etc.) in data tables and logs
+- **Unified parsing**: Dedicated utilities for bit-based (FC01/02) and register-based (FC03/04) responses
+- **Protocol support**: Full RTU and ASCII mode compatibility with proper CRC16/LRC validation
+- **Extensible design**: Structured for easy addition of future function codes
+
 ## Limitations
 
-- Only a subset of function codes parsed for response data (01/02 bits, 03/04 registers, 05/06/15/16 write echo).
+- Exception responses are decoded with basic error code translation
+- Advanced diagnostics functions (FC08+) are not yet implemented
+- File transfer and program control functions are not supported
 
 ## Project Scripts
 

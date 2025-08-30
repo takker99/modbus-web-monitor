@@ -108,7 +108,7 @@ export function App() {
         setData((prev) => [...prev.slice(-99), response]) // 最新100件保持
         addLog(
           'Info',
-          `Modbus response: received ${response.data.length} values`
+          `Modbus response (${response.functionCodeLabel}): received ${response.data.length} values`
         )
       })
 
@@ -764,6 +764,7 @@ export function App() {
               <table className="data-table">
                 <thead>
                   <tr>
+                    <th>Type</th>
                     <th>Address</th>
                     <th>Value</th>
                     <th>Time</th>
@@ -775,6 +776,7 @@ export function App() {
                       <tr
                         key={`resp-${response.timestamp.getTime()}-addr-${(readConfig.startAddress || 0) + dataIndex}-val-${value}`}
                       >
+                        <td>{response.functionCodeLabel}</td>
                         <td>
                           {formatAddress(
                             (readConfig.startAddress || 0) + dataIndex

@@ -1,6 +1,12 @@
 import fc from 'fast-check'
 import { describe, expect, it, vi } from 'vitest'
-import { calculateCRC16, calculateLRC, ModbusClient } from '../src/modbus.ts'
+import {
+  calculateCRC16,
+  calculateLRC,
+  ModbusClient,
+  parseBitResponse,
+  parseRegisterResponse,
+} from '../src/modbus.ts'
 
 // Helper to build a full RTU frame for read holding registers (FC03)
 function buildReadHoldingRegistersRequest(
@@ -162,6 +168,7 @@ describe('Response parsing', () => {
 
     const res = await promise
     expect(res.data).toEqual([1, 2])
+    expect(res.functionCodeLabel).toBe('Holding Registers')
   })
 
   it('handles coil status bit unpacking (FC01)', async () => {
@@ -181,6 +188,82 @@ describe('Response parsing', () => {
     const res = await promise
     // Bits unpacked LSB -> MSB
     expect(res.data.slice(0, 8)).toEqual([1, 0, 1, 0, 0, 1, 0, 1])
+    expect(res.functionCodeLabel).toBe('Coils')
+  })
+
+  it('handles discrete input status bit unpacking (FC02)', async () => {
+    const client = new ModbusClient()
+    const promise = client.read({
+      functionCode: 2,
+      quantity: 12,
+      slaveId: 1,
+      startAddress: 0,
+    })
+    // slave=1 fc=2 byteCount=2 data=0b11001010 0b00000101 (2 bytes for 12 bits)
+    const frame = [1, 2, 2, 0b11001010, 0b00000101]
+    const crc = calculateCRC16(frame)
+    frame.push(crc & 0xff, (crc >> 8) & 0xff)
+    client.handleResponse(new Uint8Array(frame))
+
+    const res = await promise
+    // First byte: bits 0-7, second byte: bits 8-11 (only first 4 bits used)
+    expect(res.data.slice(0, 12)).toEqual([
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1, // First byte: 0b11001010 LSB first
+      1,
+      0,
+      1,
+      0, // Second byte: 0b00000101 LSB first (first 4 bits)
+    ])
+    expect(res.functionCodeLabel).toBe('Discrete Inputs')
+  })
+
+  it('handles holding register response (FC03)', async () => {
+    const client = new ModbusClient()
+    const promise = client.read({
+      functionCode: 3,
+      quantity: 2,
+      slaveId: 1,
+      startAddress: 0,
+    })
+
+    // simulate device response
+    // slave=1 fc=3 byteCount=4 data=0x00 0x01 0x00 0x02
+    const frame = [1, 3, 4, 0, 1, 0, 2]
+    const crc = calculateCRC16(frame)
+    frame.push(crc & 0xff, (crc >> 8) & 0xff)
+    client.handleResponse(new Uint8Array(frame))
+
+    const res = await promise
+    expect(res.data).toEqual([1, 2])
+    expect(res.functionCodeLabel).toBe('Holding Registers')
+  })
+
+  it('handles input register response (FC04)', async () => {
+    const client = new ModbusClient()
+    const promise = client.read({
+      functionCode: 4,
+      quantity: 3,
+      slaveId: 2,
+      startAddress: 100,
+    })
+
+    // simulate device response
+    // slave=2 fc=4 byteCount=6 data=0x12 0x34 0x56 0x78 0x9A 0xBC
+    const frame = [2, 4, 6, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc]
+    const crc = calculateCRC16(frame)
+    frame.push(crc & 0xff, (crc >> 8) & 0xff)
+    client.handleResponse(new Uint8Array(frame))
+
+    const res = await promise
+    expect(res.data).toEqual([0x1234, 0x5678, 0x9abc])
+    expect(res.functionCodeLabel).toBe('Input Registers')
   })
 
   it('rejects on CRC error', async () => {
@@ -542,7 +625,54 @@ describe('Modbus ASCII', () => {
       const response = await promise
       expect(response.data).toEqual([10]) // 0x000A = 10
       expect(response.functionCode).toBe(3)
+      expect(response.functionCodeLabel).toBe('Holding Registers')
       expect(response.slaveId).toBe(1)
+    })
+
+    it('parses FC02 discrete inputs in ASCII mode', async () => {
+      const client = new ModbusClient()
+      client.setProtocol('ascii')
+
+      const promise = client.read({
+        functionCode: 2,
+        quantity: 8,
+        slaveId: 2,
+        startAddress: 0,
+      })
+
+      // Response: slave=02, func=02, count=01, data=A5 (0b10100101), LRC=56
+      const responseFrame = ':020201A556\r\n'
+      client.handleResponse(
+        new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0)))
+      )
+
+      const response = await promise
+      expect(response.data.slice(0, 8)).toEqual([1, 0, 1, 0, 0, 1, 0, 1]) // 0xA5 bits LSB first
+      expect(response.functionCode).toBe(2)
+      expect(response.functionCodeLabel).toBe('Discrete Inputs')
+    })
+
+    it('parses FC04 input registers in ASCII mode', async () => {
+      const client = new ModbusClient()
+      client.setProtocol('ascii')
+
+      const promise = client.read({
+        functionCode: 4,
+        quantity: 1,
+        slaveId: 1,
+        startAddress: 0,
+      })
+
+      // Response: slave=01, func=04, count=02, data=1234, LRC=B3
+      const responseFrame = ':0104021234B3\r\n'
+      client.handleResponse(
+        new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0)))
+      )
+
+      const response = await promise
+      expect(response.data).toEqual([0x1234])
+      expect(response.functionCode).toBe(4)
+      expect(response.functionCodeLabel).toBe('Input Registers')
     })
 
     it('rejects frame with bad LRC', async () => {
@@ -720,6 +850,67 @@ describe('Modbus ASCII', () => {
       )
 
       await expect(promise).rejects.toThrow(/too short/)
+    })
+  })
+})
+
+describe('Utility Functions', () => {
+  describe('parseBitResponse', () => {
+    it('correctly parses bit response from byte data', () => {
+      // Test data: single byte 0b10101001 (LSB first)
+      const responseData = [1, 1, 1, 0b10101001] // slave, fc, byteCount, data
+      const dataLength = 1
+      const result = parseBitResponse(responseData, dataLength)
+
+      // Should extract 8 bits: [1,0,0,1,0,1,0,1] (LSB first)
+      expect(result.slice(0, 8)).toEqual([1, 0, 0, 1, 0, 1, 0, 1])
+    })
+
+    it('correctly parses multi-byte bit response', () => {
+      // Test data: two bytes 0b11000000, 0b00000011
+      const responseData = [1, 2, 2, 0b11000000, 0b00000011] // slave, fc, byteCount, data1, data2
+      const dataLength = 2
+      const result = parseBitResponse(responseData, dataLength)
+
+      // First byte: [0,0,0,0,0,0,1,1], Second byte: [1,1,0,0,0,0,0,0]
+      expect(result.slice(0, 16)).toEqual([
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1, // First byte (LSB first)
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0, // Second byte (LSB first)
+      ])
+    })
+  })
+
+  describe('parseRegisterResponse', () => {
+    it('correctly parses register response from byte data', () => {
+      // Test data: two registers 0x1234, 0x5678
+      const responseData = [1, 3, 4, 0x12, 0x34, 0x56, 0x78] // slave, fc, byteCount, data
+      const dataLength = 4
+      const result = parseRegisterResponse(responseData, dataLength)
+
+      expect(result).toEqual([0x1234, 0x5678])
+    })
+
+    it('correctly parses single register response', () => {
+      // Test data: single register 0xABCD
+      const responseData = [1, 4, 2, 0xab, 0xcd] // slave, fc, byteCount, data
+      const dataLength = 2
+      const result = parseRegisterResponse(responseData, dataLength)
+
+      expect(result).toEqual([0xabcd])
     })
   })
 })
