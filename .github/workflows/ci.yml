@@ -1,30 +1,24 @@
 name: CI
 
-on:
-  push:
-    branches: [ main, '**/issue*', '**/issues*', '**/feature*' ]
-  pull_request:
-    branches: [ main ]
+on: [push, pull_request]
 
 jobs:
-  build-and-test:
+  vitest:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 10
-      - name: Install deps
-        run: pnpm install --frozen-lockfile
-      - name: Lint
-        run: pnpm check
-      - name: Build
-        run: pnpm build
-      - name: Test
-        run: pnpm test
+          cache: "pnpm"
+      - run: pnpm install
+      - run: pnpm test
+  biome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: biomejs/setup-biome@v2
+      - run: biome ci
