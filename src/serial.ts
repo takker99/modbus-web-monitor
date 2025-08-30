@@ -5,6 +5,7 @@ type SerialManagerEvents = {
   portSelected: [SerialPort]
   connected: []
   disconnected: []
+  portDisconnected: [] // Unexpected disconnect (cable unplug, permission revocation)
   error: [Error]
   data: [Uint8Array]
 }
@@ -99,25 +100,56 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
     }
 
     try {
+      // Mark as disconnecting to prevent unexpected disconnect events
+      this.isConnected = false
+
       // リーダーを解放
       if (this.reader) {
-        await this.reader.cancel()
-        this.reader.releaseLock()
+        try {
+          await this.reader.cancel()
+        } catch (error) {
+          // Ignore errors during cancel as port may already be closed
+          console.log(
+            'SerialManager: Reader cancel failed (port may be closed)',
+            error
+          )
+        }
+        try {
+          this.reader.releaseLock()
+        } catch (error) {
+          // Ignore errors during releaseLock as reader may already be closed
+          console.log('SerialManager: Reader releaseLock failed', error)
+        }
         this.reader = null
       }
 
       // ライターを解放
       if (this.writer) {
-        await this.writer.close()
+        try {
+          await this.writer.close()
+        } catch (error) {
+          // Ignore errors during close as port may already be closed
+          console.log(
+            'SerialManager: Writer close failed (port may be closed)',
+            error
+          )
+        }
         this.writer = null
       }
 
       // ポートを閉じる
       if (this.port) {
-        await this.port.close()
+        try {
+          await this.port.close()
+        } catch (error) {
+          // Ignore errors during port close as port may already be closed
+          console.log(
+            'SerialManager: Port close failed (port may be closed)',
+            error
+          )
+        }
       }
 
-      this.isConnected = false
       this.emit('disconnected')
     } catch (error) {
       throw new Error(`Failed to disconnect: ${(error as Error).message}`)
@@ -144,6 +176,11 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
         const { value, done } = await this.reader.read()
 
         if (done) {
+          // Stream ended - this typically means the port was closed
+          if (this.isConnected) {
+            console.log('SerialManager: Read stream ended unexpectedly')
+            this.handleUnexpectedDisconnect('Port read stream ended')
+          }
           break
         }
 
@@ -153,15 +190,92 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
       }
     } catch (error) {
       if (this.isConnected) {
-        this.emit(
-          'error',
-          new Error(`Data receive error: ${(error as Error).message}`)
-        )
+        console.log('SerialManager: Read error while connected', error)
+
+        // Check if this looks like a disconnect error
+        const errorMessage = (error as Error).message.toLowerCase()
+        if (
+          errorMessage.includes('device') ||
+          errorMessage.includes('port') ||
+          errorMessage.includes('connection') ||
+          errorMessage.includes('network') ||
+          errorMessage.includes('disconnected')
+        ) {
+          this.handleUnexpectedDisconnect((error as Error).message)
+        } else {
+          this.emit(
+            'error',
+            new Error(`Data receive error: ${(error as Error).message}`)
+          )
+        }
       }
     }
   }
 
+  private handleUnexpectedDisconnect(reason: string): void {
+    console.log('SerialManager: Handling unexpected disconnect:', reason)
+
+    // Clean up resources without emitting 'disconnected' event
+    this.isConnected = false
+
+    // Clean up reader
+    if (this.reader) {
+      try {
+        this.reader.releaseLock()
+      } catch (error) {
+        console.log(
+          'SerialManager: Error releasing reader lock during unexpected disconnect',
+          error
+        )
+      }
+      this.reader = null
+    }
+
+    // Clean up writer
+    if (this.writer) {
+      try {
+        this.writer.close()
+      } catch (error) {
+        console.log(
+          'SerialManager: Error closing writer during unexpected disconnect',
+          error
+        )
+      }
+      this.writer = null
+    }
+
+    // Emit the specific port disconnected event
+    this.emit('portDisconnected')
+  }
+
   get connected(): boolean {
     return this.isConnected
+  }
+
+  async reconnect(config: SerialConfig): Promise<void> {
+    console.log('SerialManager: attempting reconnection')
+
+    // If already connected, disconnect first
+    if (this.isConnected) {
+      await this.disconnect()
+    }
+
+    // Attempt to reconnect using the same port if available
+    if (this.port) {
+      try {
+        await this.connect(config)
+      } catch (error) {
+        // If reconnection with existing port fails, clear the port reference
+        console.log(
+          'SerialManager: Reconnection with existing port failed, clearing port reference'
+        )
+        this.port = null
+        throw error
+      }
+    } else {
+      throw new Error(
+        'No port available for reconnection. Please select a port first.'
+      )
+    }
   }
 }

@@ -18,6 +18,7 @@ export function App() {
   >('Disconnected')
   const [portSelected, setPortSelected] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
+  const [portDisconnected, setPortDisconnected] = useState(false) // Track unexpected disconnection
   const [isMonitoring, setIsMonitoring] = useState(false)
   const [logs, setLogs] = useState<
     Array<{ timestamp: string; type: string; message: string }>
@@ -86,7 +87,20 @@ export function App() {
         setConnectionStatus('Disconnected')
         setIsConnected(false)
         setIsMonitoring(false)
+        setPortDisconnected(false) // Clear disconnect flag on normal disconnect
         addLog('Info', 'Disconnected from serial port')
+      })
+
+      serialManager.on('portDisconnected', () => {
+        console.log('Port disconnected unexpectedly')
+        setConnectionStatus('Disconnected')
+        setIsConnected(false)
+        setIsMonitoring(false)
+        setPortDisconnected(true) // Set disconnect flag for unexpected disconnect
+        addLog(
+          'Warning',
+          'Serial port disconnected unexpectedly (cable unplugged or permission revoked)'
+        )
       })
 
       serialManager.on('error', (error: Error) => {
@@ -153,6 +167,7 @@ export function App() {
   const handleConnect = async () => {
     try {
       await serialManager.connect(serialConfig)
+      setPortDisconnected(false) // Clear disconnect flag on successful connection
     } catch (error) {
       addLog('Error', `Connection error: ${(error as Error).message}`)
     }
@@ -163,6 +178,17 @@ export function App() {
       await serialManager.disconnect()
     } catch (error) {
       addLog('Error', `Disconnection error: ${(error as Error).message}`)
+    }
+  }
+
+  const handleReconnect = async () => {
+    try {
+      addLog('Info', 'Attempting to reconnect...')
+      await serialManager.reconnect(serialConfig)
+      setPortDisconnected(false) // Clear disconnect flag on successful reconnection
+      addLog('Info', 'Reconnected successfully')
+    } catch (error) {
+      addLog('Error', `Reconnection error: ${(error as Error).message}`)
     }
   }
 
@@ -394,6 +420,34 @@ export function App() {
           </span>
         </div>
       </header>
+
+      {/* Port Disconnected Banner */}
+      {portDisconnected && (
+        <div className="port-disconnected-banner">
+          <div className="banner-content">
+            <span className="banner-icon">⚠️</span>
+            <div className="banner-text">
+              <strong>Port Disconnected</strong>
+              <p>
+                The serial port was disconnected unexpectedly. This could be due
+                to:
+              </p>
+              <ul>
+                <li>Cable or adapter unplugged</li>
+                <li>Browser permission revoked</li>
+                <li>Device error or power loss</li>
+              </ul>
+            </div>
+            <button
+              className="btn btn-warning"
+              onClick={handleReconnect}
+              type="button"
+            >
+              Reconnect
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="main-content">
         {/* Connection Settings Panel */}

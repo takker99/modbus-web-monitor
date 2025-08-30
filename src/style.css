@@ -52,6 +52,55 @@ body {
   color: #e74c3c;
 }
 
+/* Port Disconnected Banner */
+.port-disconnected-banner {
+  padding: 16px 20px;
+  margin: 0;
+  color: white;
+  background: linear-gradient(135deg, #f39c12, #e67e22);
+  border-bottom: 3px solid #d68910;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.banner-content {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.banner-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 24px;
+}
+
+.banner-text {
+  flex: 1;
+}
+
+.banner-text strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 18px;
+}
+
+.banner-text p {
+  margin-bottom: 8px;
+  opacity: 0.95;
+}
+
+.banner-text ul {
+  margin-bottom: 0;
+  margin-left: 20px;
+}
+
+.banner-text li {
+  margin-bottom: 4px;
+  opacity: 0.9;
+}
+
 /* メインコンテンツ */
 .main-content {
   display: grid;
@@ -176,6 +225,21 @@ body {
 
 .btn-secondary:hover:not(:disabled) {
   background: #7f8c8d;
+}
+
+/* Port Disconnected Banner Button Override */
+.port-disconnected-banner .btn {
+  margin-top: 4px;
+  font-weight: 600;
+  color: white;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.port-disconnected-banner .btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
 }
 
 /* ポートコントロール */
