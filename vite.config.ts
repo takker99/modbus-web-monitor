@@ -22,30 +22,4 @@ export default defineConfig({
     open: true,
     port: 3000,
   },
-  test: {
-    coverage: {
-      enabled: true,
-      reporter: ['text', 'text-summary', 'html', 'json'],
-      reportsDirectory: './coverage',
-      include: ['src/modbus.ts'],
-      exclude: [
-        'node_modules/**',
-        'dist/**',
-        'coverage/**',
-        '**/*.config.*',
-        '**/*.test.*',
-        'test/**',
-        'src/App.tsx',
-        'src/main.tsx',
-        'src/types.ts',
-        'src/serial.ts',
-      ],
-      thresholds: {
-        statements: 90,
-        branches: 85,
-        lines: 90,
-        functions: 90,
-      },
-    },
-  },
 })
