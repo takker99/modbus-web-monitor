@@ -48,6 +48,7 @@ export interface ModbusWriteUIConfig {
 export interface ModbusResponse {
   slaveId: number
   functionCode: number
+  functionCodeLabel: string // Human-readable label for the function code
   data: number[]
   address?: number
   timestamp: Date

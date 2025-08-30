@@ -30,6 +30,46 @@ export function calculateLRC(data: number[]): number {
   return (256 - (lrc % 256)) % 256
 }
 
+// Function code metadata mapping for easy extension and UI labeling
+export const FUNCTION_CODE_LABELS: Record<number, string> = {
+  1: 'Coils',
+  2: 'Discrete Inputs',
+  3: 'Holding Registers',
+  4: 'Input Registers',
+  5: 'Single Coil Write',
+  6: 'Single Register Write',
+  15: 'Multiple Coils Write',
+  16: 'Multiple Registers Write',
+} as const
+
+// Utility function to parse bit-based responses (FC01/FC02)
+export function parseBitResponse(
+  responseData: number[],
+  dataLength: number
+): number[] {
+  const data: number[] = []
+  for (let i = 0; i < dataLength; i++) {
+    const byte = responseData[3 + i]
+    for (let bit = 0; bit < 8; bit++) {
+      data.push((byte >> bit) & 1)
+    }
+  }
+  return data
+}
+
+// Utility function to parse register-based responses (FC03/FC04)
+export function parseRegisterResponse(
+  responseData: number[],
+  dataLength: number
+): number[] {
+  const data: number[] = []
+  for (let i = 0; i < dataLength; i += 2) {
+    const value = (responseData[3 + i] << 8) | responseData[3 + i + 1]
+    data.push(value)
+  }
+  return data
+}
+
 // Event types for ModbusClient
 type ModbusClientEvents = {
   response: [ModbusResponse]
@@ -337,28 +377,22 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     const slaveId = messageBytes[0]
     const functionCode = messageBytes[1]
 
-    const data: number[] = []
+    let data: number[] = []
     if (functionCode === 3 || functionCode === 4) {
-      // Register read response
+      // Register read response (FC03/FC04)
       const dataLength = messageBytes[2]
-      for (let i = 0; i < dataLength; i += 2) {
-        const value = (messageBytes[3 + i] << 8) | messageBytes[3 + i + 1]
-        data.push(value)
-      }
+      data = parseRegisterResponse(messageBytes, dataLength)
     } else if (functionCode === 1 || functionCode === 2) {
-      // Coil/input status read response
+      // Coil/input status read response (FC01/FC02)
       const dataLength = messageBytes[2]
-      for (let i = 0; i < dataLength; i++) {
-        const byte = messageBytes[3 + i]
-        for (let bit = 0; bit < 8; bit++) {
-          data.push((byte >> bit) & 1)
-        }
-      }
+      data = parseBitResponse(messageBytes, dataLength)
     }
 
     const modbusResponse: ModbusResponse = {
       data,
       functionCode,
+      functionCodeLabel:
+        FUNCTION_CODE_LABELS[functionCode] || `Unknown (${functionCode})`,
       slaveId,
       timestamp: new Date(),
     }
@@ -375,28 +409,22 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     const slaveId = response[0]
     const functionCode = response[1]
 
-    const data: number[] = []
+    let data: number[] = []
     if (functionCode === 3 || functionCode === 4) {
-      // レジスタ読み取り
+      // Register read response (FC03/FC04)
       const dataLength = response[2]
-      for (let i = 0; i < dataLength; i += 2) {
-        const value = (response[3 + i] << 8) | response[3 + i + 1]
-        data.push(value)
-      }
+      data = parseRegisterResponse(response, dataLength)
     } else if (functionCode === 1 || functionCode === 2) {
-      // コイル/入力ステータス読み取り
+      // Coil/input status read response (FC01/FC02)
       const dataLength = response[2]
-      for (let i = 0; i < dataLength; i++) {
-        const byte = response[3 + i]
-        for (let bit = 0; bit < 8; bit++) {
-          data.push((byte >> bit) & 1)
-        }
-      }
+      data = parseBitResponse(response, dataLength)
     }
 
     const modbusResponse: ModbusResponse = {
       data,
       functionCode,
+      functionCodeLabel:
+        FUNCTION_CODE_LABELS[functionCode] || `Unknown (${functionCode})`,
       slaveId,
       timestamp: new Date(),
     }
