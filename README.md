@@ -36,6 +36,45 @@ Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Ser
 
 The Preact entry point is `index.html` -> `src/main.tsx` -> `App`.
 
+## Function Code Type Safety
+
+The codebase uses TypeScript's strict typing for Modbus function codes to prevent runtime errors from unsupported codes:
+
+```typescript
+// Type-safe function code definitions
+type ReadFunctionCode = 1 | 2 | 3 | 4       // Read operations only
+type WriteSingleFunctionCode = 5 | 6         // Single write operations
+type WriteMultiFunctionCode = 15 | 16        // Multi-write operations
+type WriteFunctionCode = WriteSingleFunctionCode | WriteMultiFunctionCode
+
+// Usage in configuration interfaces
+interface ModbusReadConfig {
+  functionCode: ReadFunctionCode  // Only 1|2|3|4 allowed
+  // ... other properties
+}
+
+interface ModbusWriteConfig {
+  functionCode: WriteFunctionCode  // Only 5|6|15|16 allowed  
+  // ... other properties
+}
+```
+
+**Benefits:**
+- **Compile-time validation**: TypeScript will reject invalid function codes (e.g., `functionCode: 7`)
+- **Enhanced IDE support**: Auto-completion shows only valid function codes
+- **Documentation**: Types serve as inline documentation of supported operations
+- **Refactoring safety**: Changes to supported function codes are automatically reflected
+
+Example:
+```typescript
+// ✅ Valid - compiles successfully
+const readConfig: ModbusReadConfig = { functionCode: 3, ... }
+const writeConfig: ModbusWriteConfig = { functionCode: 6, ... }
+
+// ❌ Invalid - TypeScript compilation error
+const invalidConfig: ModbusReadConfig = { functionCode: 7, ... }  // Error!
+```
+
 ## Prerequisites
 
 - Chromium-based browser with Web Serial API (Chrome 89+, Edge, etc.). Firefox & Safari currently lack required API.

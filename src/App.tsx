@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useCallback, useEffect, useState } from 'preact/hooks'
 import { ModbusClient } from './modbus.ts'
 import { SerialManager } from './serial.ts'
 import type {
   ModbusReadConfig,
   ModbusResponse,
   ModbusWriteConfig,
+  ModbusWriteUIConfig,
   SerialConfig,
+  WriteFunctionCode,
 } from './types.ts'
+import { isReadFunctionCode, isWriteFunctionCode } from './types.ts'
 
 export function App() {
   // State management
@@ -40,9 +43,9 @@ export function App() {
     quantity: 10,
     startAddress: 0,
   })
-  const [writeConfig, setWriteConfig] = useState({
+  const [writeConfig, setWriteConfig] = useState<ModbusWriteUIConfig>({
     address: 0,
-    functionCode: 6,
+    functionCode: 6 as WriteFunctionCode,
     multiValues: '', // For multi-write input (comma-separated or multi-line)
     quantity: 1, // For multi-writes (FC15/16)
     value: '',
@@ -254,7 +257,7 @@ export function App() {
     }
   }
 
-  const copyAllLogs = async () => {
+  const copyAllLogs = useCallback(async () => {
     try {
       const allLogsText = logs
         .map((log) => `${log.timestamp} [${log.type}] ${log.message}`)
@@ -264,7 +267,7 @@ export function App() {
     } catch (err) {
       console.error('Failed to copy all logs:', err)
     }
-  }
+  }, [logs])
 
   const formatValue = (value: number) => {
     return hexDisplay
@@ -272,6 +275,46 @@ export function App() {
       : value.toString()
   }
 
+  // Memoized event handlers to prevent unnecessary re-renders
+  const handleReadFunctionCodeChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    const value = Number(target.value)
+    if (isReadFunctionCode(value)) {
+      setReadConfig((prev) => ({ ...prev, functionCode: value }))
+    } else {
+      console.error('Invalid read function code:', value)
+    }
+  }, [])
+
+  const handleWriteFunctionCodeChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    const value = Number(target.value)
+    if (isWriteFunctionCode(value)) {
+      setWriteConfig((prev) => ({ ...prev, functionCode: value }))
+    } else {
+      console.error('Invalid write function code:', value)
+    }
+  }, [])
+
+  const handleWriteValueChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement | HTMLTextAreaElement
+    setWriteConfig((prev) => ({ ...prev, value: target.value }))
+  }, [])
+
+  const handleWriteMultiValuesChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLTextAreaElement
+    setWriteConfig((prev) => ({ ...prev, multiValues: target.value }))
+  }, [])
+
+  const handleSlaveIdChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    setSlaveId(Number(target.value))
+  }, [])
+
+  const handleHexDisplayChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    setHexDisplay(target.checked)
+  }, [])
   // Helper functions for multi-write operations
   const parseCoilValues = (input: string): number[] => {
     // Parse comma-separated or space-separated bits (0/1)
@@ -472,7 +515,7 @@ export function App() {
                 id="slaveId"
                 max="247"
                 min="1"
-                onChange={(e) => setSlaveId(Number(e.currentTarget.value))}
+                onChange={handleSlaveIdChange}
                 type="number"
                 value={slaveId}
               />
@@ -504,12 +547,7 @@ export function App() {
               <select
                 disabled={!isConnected}
                 id="readFunctionCode"
-                onChange={(e) =>
-                  setReadConfig((prev) => ({
-                    ...prev,
-                    functionCode: Number(e.currentTarget.value),
-                  }))
-                }
+                onChange={handleReadFunctionCodeChange}
                 value={readConfig.functionCode}
               >
                 <option value={1}>01 - Read Coils</option>
@@ -585,12 +623,7 @@ export function App() {
               <select
                 disabled={!isConnected}
                 id="writeFunctionCode"
-                onChange={(e) =>
-                  setWriteConfig((prev) => ({
-                    ...prev,
-                    functionCode: Number(e.currentTarget.value),
-                  }))
-                }
+                onChange={handleWriteFunctionCodeChange}
                 value={writeConfig.functionCode}
               >
                 <option value={5}>05 - Write Single Coil</option>
@@ -631,12 +664,7 @@ export function App() {
                 <input
                   disabled={!isConnected}
                   id="writeValue"
-                  onChange={(e) =>
-                    setWriteConfig((prev) => ({
-                      ...prev,
-                      value: e.currentTarget.value,
-                    }))
-                  }
+                  onChange={handleWriteValueChange}
                   placeholder="e.g. 1234 or 0x04D2"
                   type="text"
                   value={writeConfig.value}
@@ -650,12 +678,7 @@ export function App() {
                 <textarea
                   disabled={!isConnected}
                   id="multiCoilValues"
-                  onChange={(e) =>
-                    setWriteConfig((prev) => ({
-                      ...prev,
-                      multiValues: e.currentTarget.value,
-                    }))
-                  }
+                  onChange={handleWriteMultiValuesChange}
                   placeholder="e.g. 1,0,1,1,0 or 1 0 1 1 0 (max 1968 coils)"
                   rows={3}
                   value={writeConfig.multiValues}
@@ -672,12 +695,7 @@ export function App() {
                 <textarea
                   disabled={!isConnected}
                   id="multiRegisterValues"
-                  onChange={(e) =>
-                    setWriteConfig((prev) => ({
-                      ...prev,
-                      multiValues: e.currentTarget.value,
-                    }))
-                  }
+                  onChange={handleWriteMultiValuesChange}
                   placeholder={
                     hexDisplay
                       ? 'e.g. 0x1234,0x5678 or line-separated (max 123 registers)'
@@ -720,7 +738,7 @@ export function App() {
             <label>
               <input
                 checked={hexDisplay}
-                onChange={(e) => setHexDisplay(e.currentTarget.checked)}
+                onChange={handleHexDisplayChange}
                 type="checkbox"
               />{' '}
               Hex Display

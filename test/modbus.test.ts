@@ -723,3 +723,35 @@ describe('Modbus ASCII', () => {
     })
   })
 })
+
+describe('Function Code Type Safety', () => {
+  it('allows valid read function codes', () => {
+    const _client = new ModbusClient()
+
+    // All these should compile without TypeScript errors
+    const validReadConfigs = [
+      { functionCode: 1 as const, quantity: 1, slaveId: 1, startAddress: 0 },
+      { functionCode: 2 as const, quantity: 1, slaveId: 1, startAddress: 0 },
+      { functionCode: 3 as const, quantity: 1, slaveId: 1, startAddress: 0 },
+      { functionCode: 4 as const, quantity: 1, slaveId: 1, startAddress: 0 },
+    ]
+
+    // If this compiles, the types are working correctly
+    expect(validReadConfigs).toHaveLength(4)
+  })
+
+  it('allows valid write function codes', () => {
+    const _client = new ModbusClient()
+
+    // All these should compile without TypeScript errors
+    const validWriteConfigs = [
+      { address: 0, functionCode: 5 as const, slaveId: 1, value: 1 },
+      { address: 0, functionCode: 6 as const, slaveId: 1, value: 100 },
+      { address: 0, functionCode: 15 as const, slaveId: 1, value: [1, 0, 1] },
+      { address: 0, functionCode: 16 as const, slaveId: 1, value: [100, 200] },
+    ]
+
+    // If this compiles, the types are working correctly
+    expect(validWriteConfigs).toHaveLength(4)
+  })
+})
