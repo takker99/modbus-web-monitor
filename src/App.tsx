@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useCallback, useEffect, useState } from 'preact/hooks'
 import { ModbusClient } from './modbus.ts'
 import { SerialManager } from './serial.ts'
 import type {
   ModbusReadConfig,
   ModbusResponse,
   ModbusWriteConfig,
+  ModbusWriteUIConfig,
   SerialConfig,
+  WriteFunctionCode,
 } from './types.ts'
+import { isReadFunctionCode, isWriteFunctionCode } from './types.ts'
 
 export function App() {
   // State management
@@ -40,9 +43,11 @@ export function App() {
     quantity: 10,
     startAddress: 0,
   })
-  const [writeConfig, setWriteConfig] = useState({
+  const [writeConfig, setWriteConfig] = useState<ModbusWriteUIConfig>({
     address: 0,
-    functionCode: 6,
+    functionCode: 6 as WriteFunctionCode,
+    multiValues: '', // For multi-write input (comma-separated or multi-line)
+    quantity: 1, // For multi-writes (FC15/16)
     value: '',
   })
 
@@ -172,11 +177,33 @@ export function App() {
 
   const handleWrite = async () => {
     try {
-      let value: number
-      if (hexDisplay) {
-        value = Number.parseInt(writeConfig.value, 16)
+      let value: number | number[]
+
+      if (writeConfig.functionCode === 15) {
+        // FC15 - Write Multiple Coils
+        value = parseCoilValues(writeConfig.multiValues)
+        addLog(
+          'Info',
+          `Writing ${value.length} coils starting at address ${writeConfig.address}`
+        )
+      } else if (writeConfig.functionCode === 16) {
+        // FC16 - Write Multiple Registers
+        value = parseRegisterValues(writeConfig.multiValues)
+        addLog(
+          'Info',
+          `Writing ${value.length} registers starting at address ${writeConfig.address}`
+        )
       } else {
-        value = Number.parseInt(writeConfig.value, 10)
+        // FC05/06 - Single writes
+        if (hexDisplay) {
+          value = Number.parseInt(writeConfig.value, 16)
+        } else {
+          value = Number.parseInt(writeConfig.value, 10)
+        }
+
+        if (Number.isNaN(value)) {
+          throw new Error('Invalid value format')
+        }
       }
 
       const config: ModbusWriteConfig = {
@@ -230,7 +257,7 @@ export function App() {
     }
   }
 
-  const copyAllLogs = async () => {
+  const copyAllLogs = useCallback(async () => {
     try {
       const allLogsText = logs
         .map((log) => `${log.timestamp} [${log.type}] ${log.message}`)
@@ -240,12 +267,109 @@ export function App() {
     } catch (err) {
       console.error('Failed to copy all logs:', err)
     }
-  }
+  }, [logs])
 
   const formatValue = (value: number) => {
     return hexDisplay
       ? `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
       : value.toString()
+  }
+
+  // Memoized event handlers to prevent unnecessary re-renders
+  const handleReadFunctionCodeChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    const value = Number(target.value)
+    if (isReadFunctionCode(value)) {
+      setReadConfig((prev) => ({ ...prev, functionCode: value }))
+    } else {
+      console.error('Invalid read function code:', value)
+    }
+  }, [])
+
+  const handleWriteFunctionCodeChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLSelectElement
+    const value = Number(target.value)
+    if (isWriteFunctionCode(value)) {
+      setWriteConfig((prev) => ({ ...prev, functionCode: value }))
+    } else {
+      console.error('Invalid write function code:', value)
+    }
+  }, [])
+
+  const handleWriteValueChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement | HTMLTextAreaElement
+    setWriteConfig((prev) => ({ ...prev, value: target.value }))
+  }, [])
+
+  const handleWriteMultiValuesChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLTextAreaElement
+    setWriteConfig((prev) => ({ ...prev, multiValues: target.value }))
+  }, [])
+
+  const handleSlaveIdChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    setSlaveId(Number(target.value))
+  }, [])
+
+  const handleHexDisplayChange = useCallback((e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    setHexDisplay(target.checked)
+  }, [])
+  // Helper functions for multi-write operations
+  const parseCoilValues = (input: string): number[] => {
+    // Parse comma-separated or space-separated bits (0/1)
+    const values = input
+      .split(/[,\s]+/)
+      .map((v) => v.trim())
+      .filter((v) => v !== '')
+      .map((v) => {
+        const num = Number.parseInt(v, 10)
+        if (num !== 0 && num !== 1) {
+          throw new Error(`Invalid coil value: ${v}. Must be 0 or 1.`)
+        }
+        return num
+      })
+
+    if (values.length === 0) {
+      throw new Error('No coil values provided')
+    }
+    if (values.length > 1968) {
+      throw new Error(`Too many coils: ${values.length}. Maximum is 1968.`)
+    }
+
+    return values
+  }
+
+  const parseRegisterValues = (input: string): number[] => {
+    // Parse comma-separated, newline-separated, or space-separated register values
+    const values = input
+      .split(/[,\n\s]+/)
+      .map((v) => v.trim())
+      .filter((v) => v !== '')
+      .map((v) => {
+        let num: number
+        if (hexDisplay && v.startsWith('0x')) {
+          num = Number.parseInt(v, 16)
+        } else if (hexDisplay) {
+          num = Number.parseInt(v, 16)
+        } else {
+          num = Number.parseInt(v, 10)
+        }
+
+        if (Number.isNaN(num) || num < 0 || num > 65535) {
+          throw new Error(`Invalid register value: ${v}. Must be 0-65535.`)
+        }
+        return num
+      })
+
+    if (values.length === 0) {
+      throw new Error('No register values provided')
+    }
+    if (values.length > 123) {
+      throw new Error(`Too many registers: ${values.length}. Maximum is 123.`)
+    }
+
+    return values
   }
 
   const formatAddress = (address: number) => {
@@ -391,7 +515,7 @@ export function App() {
                 id="slaveId"
                 max="247"
                 min="1"
-                onChange={(e) => setSlaveId(Number(e.currentTarget.value))}
+                onChange={handleSlaveIdChange}
                 type="number"
                 value={slaveId}
               />
@@ -423,12 +547,7 @@ export function App() {
               <select
                 disabled={!isConnected}
                 id="readFunctionCode"
-                onChange={(e) =>
-                  setReadConfig((prev) => ({
-                    ...prev,
-                    functionCode: Number(e.currentTarget.value),
-                  }))
-                }
+                onChange={handleReadFunctionCodeChange}
                 value={readConfig.functionCode}
               >
                 <option value={1}>01 - Read Coils</option>
@@ -504,12 +623,7 @@ export function App() {
               <select
                 disabled={!isConnected}
                 id="writeFunctionCode"
-                onChange={(e) =>
-                  setWriteConfig((prev) => ({
-                    ...prev,
-                    functionCode: Number(e.currentTarget.value),
-                  }))
-                }
+                onChange={handleWriteFunctionCodeChange}
                 value={writeConfig.functionCode}
               >
                 <option value={5}>05 - Write Single Coil</option>
@@ -520,7 +634,12 @@ export function App() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="writeAddress">Write Address:</label>
+              <label htmlFor="writeAddress">
+                {writeConfig.functionCode === 15 ||
+                writeConfig.functionCode === 16
+                  ? 'Start Address:'
+                  : 'Write Address:'}
+              </label>
               <input
                 disabled={!isConnected}
                 id="writeAddress"
@@ -537,27 +656,72 @@ export function App() {
               />
             </div>
 
-            <div className="form-group">
-              <label htmlFor="writeValue">Value:</label>
-              <input
-                disabled={!isConnected}
-                id="writeValue"
-                onChange={(e) =>
-                  setWriteConfig((prev) => ({
-                    ...prev,
-                    value: e.currentTarget.value,
-                  }))
-                }
-                placeholder="e.g. 1234 or 0x04D2"
-                type="text"
-                value={writeConfig.value}
-              />
-            </div>
+            {/* Conditional inputs based on function code */}
+            {(writeConfig.functionCode === 5 ||
+              writeConfig.functionCode === 6) && (
+              <div className="form-group">
+                <label htmlFor="writeValue">Value:</label>
+                <input
+                  disabled={!isConnected}
+                  id="writeValue"
+                  onChange={handleWriteValueChange}
+                  placeholder="e.g. 1234 or 0x04D2"
+                  type="text"
+                  value={writeConfig.value}
+                />
+              </div>
+            )}
+
+            {writeConfig.functionCode === 15 && (
+              <div className="form-group">
+                <label htmlFor="multiCoilValues">Coil Values (0/1):</label>
+                <textarea
+                  disabled={!isConnected}
+                  id="multiCoilValues"
+                  onChange={handleWriteMultiValuesChange}
+                  placeholder="e.g. 1,0,1,1,0 or 1 0 1 1 0 (max 1968 coils)"
+                  rows={3}
+                  value={writeConfig.multiValues}
+                />
+                <small style={{ color: '#666', fontSize: '12px' }}>
+                  Enter comma or space-separated bits (0 or 1). Max 1968 coils.
+                </small>
+              </div>
+            )}
+
+            {writeConfig.functionCode === 16 && (
+              <div className="form-group">
+                <label htmlFor="multiRegisterValues">Register Values:</label>
+                <textarea
+                  disabled={!isConnected}
+                  id="multiRegisterValues"
+                  onChange={handleWriteMultiValuesChange}
+                  placeholder={
+                    hexDisplay
+                      ? 'e.g. 0x1234,0x5678 or line-separated (max 123 registers)'
+                      : 'e.g. 1234,5678 or line-separated (max 123 registers)'
+                  }
+                  rows={4}
+                  value={writeConfig.multiValues}
+                />
+                <small style={{ color: '#666', fontSize: '12px' }}>
+                  Enter comma, space, or line-separated values (0-65535). Max
+                  123 registers.
+                  {hexDisplay && ' Use 0x prefix for hex values.'}
+                </small>
+              </div>
+            )}
 
             <div className="form-group">
               <button
                 className="btn btn-warning"
-                disabled={!isConnected || !writeConfig.value}
+                disabled={
+                  !isConnected ||
+                  (writeConfig.functionCode === 5 ||
+                  writeConfig.functionCode === 6
+                    ? !writeConfig.value
+                    : !writeConfig.multiValues)
+                }
                 onClick={handleWrite}
                 type="button"
               >
@@ -574,7 +738,7 @@ export function App() {
             <label>
               <input
                 checked={hexDisplay}
-                onChange={(e) => setHexDisplay(e.currentTarget.checked)}
+                onChange={handleHexDisplayChange}
                 type="checkbox"
               />{' '}
               Hex Display
