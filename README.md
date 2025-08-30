@@ -286,3 +286,4 @@ MIT © 2025 takker99
 
 ---
 Enjoy inspecting your Modbus devices directly from the browser.
+# Test CI fix
