@@ -17,6 +17,28 @@ Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Ser
 - Simple buffering & response correlation with timeout handling
 - Clean, responsive UI (desktop & mobile)
 
+## Coverage
+
+Code coverage reports are automatically generated and uploaded for each CI run. The project maintains comprehensive test coverage for core Modbus protocol functionality.
+
+[![codecov](https://codecov.io/gh/takker99/modbus-web-monitor/branch/main/graph/badge.svg)](https://codecov.io/gh/takker99/modbus-web-monitor)
+
+### Running Coverage Locally
+
+```bash
+# Generate coverage report
+pnpm test:coverage
+
+# View HTML report
+open coverage/index.html
+```
+
+Coverage reports include:
+- Line, branch, and function coverage metrics
+- Detailed per-file coverage analysis
+- HTML report with uncovered line highlighting
+- LCOV format for CI integration
+
 ## Roadmap Ideas (Not yet implemented)
 
 - Saving / loading session profiles
@@ -287,6 +309,12 @@ pnpm test test/modbus.test.ts
 - **Race condition prevention** testing for concurrent requests
 
 The test suite validates that the Modbus implementation handles malformed frames gracefully without crashes and properly manages request timeouts and overlapping requests.
+
+The project includes a comprehensive CI pipeline that:
+- Tests across Node.js versions 18, 20, and 22
+- Uses pnpm dependency caching for faster builds
+- Generates and uploads coverage reports
+- Automatically uploads coverage data to Codecov (if configured)
 
 ## Contributing
 

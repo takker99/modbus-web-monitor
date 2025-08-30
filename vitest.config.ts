@@ -18,7 +18,8 @@ export default defineConfig({
         'src/serial.ts',
       ],
       include: ['src/modbus.ts'],
-      reporter: ['text', 'text-summary', 'html', 'json'],
+      provider: 'v8',
+      reporter: ['text', 'text-summary', 'html', 'json', 'lcov'],
       reportsDirectory: './coverage',
       thresholds: {
         branches: 85,
