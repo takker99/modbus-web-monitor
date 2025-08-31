@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useState } from 'preact/hooks'
-import { ModbusClient } from './modbus.ts'
-import { SerialManager } from './serial.ts'
+import type { WriteFunctionCode } from './functionCodes.ts'
+import { isReadFunctionCode, isWriteFunctionCode } from './functionCodes.ts'
 import type {
   ModbusReadConfig,
   ModbusResponse,
   ModbusWriteConfig,
-  ModbusWriteUIConfig,
-  SerialConfig,
-  WriteFunctionCode,
-} from './types.ts'
-import { isReadFunctionCode, isWriteFunctionCode } from './types.ts'
+} from './modbus.ts'
+import { ModbusClient } from './modbus.ts'
+import type { SerialConfig } from './serial.ts'
+import { SerialManager } from './serial.ts'
+
+// Extended interface for the UI state (includes additional fields for multi-value input)
+interface ModbusWriteUIConfig {
+  address: number
+  functionCode: WriteFunctionCode
+  multiValues: string // For multi-write input (comma-separated or multi-line)
+  quantity: number // For multi-writes (FC15/16)
+  value: string // For single-value input
+}
 
 export function App() {
   // State management

@@ -2,7 +2,7 @@
 
 import { calculateCRC16 } from './crc.ts'
 import { calculateLRC } from './lrc.ts'
-import type { ModbusReadConfig, ModbusWriteConfig } from './types.ts'
+import type { ModbusReadConfig, ModbusWriteConfig } from './modbus.ts'
 
 export type ModbusProtocol = 'rtu' | 'ascii'
 

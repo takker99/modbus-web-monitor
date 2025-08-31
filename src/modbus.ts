@@ -11,15 +11,37 @@ import {
   parseBitResponse,
   parseRegisterResponse,
 } from './frameParser.ts'
-import { FUNCTION_CODE_LABELS, isValidFunctionCode } from './functionCodes.ts'
+import {
+  FUNCTION_CODE_LABELS,
+  isValidFunctionCode,
+  type ReadFunctionCode,
+  type WriteFunctionCode,
+} from './functionCodes.ts'
 import { calculateLRC } from './lrc.ts'
 import { EventEmitter } from './serial.ts'
-import type {
-  ModbusReadConfig,
-  ModbusResponse,
-  ModbusWriteConfig,
-} from './types.ts'
 
+export interface ModbusResponse {
+  slaveId: number
+  functionCode: number
+  functionCodeLabel: string // Human-readable label for the function code
+  data: number[]
+  address?: number
+  timestamp: Date
+}
+
+export interface ModbusReadConfig {
+  slaveId: number
+  functionCode: ReadFunctionCode
+  startAddress: number
+  quantity: number
+}
+
+export interface ModbusWriteConfig {
+  slaveId: number
+  functionCode: WriteFunctionCode
+  address: number
+  value: number | number[]
+}
 // Event types for ModbusClient
 type ModbusClientEvents = {
   response: [ModbusResponse]
@@ -29,39 +51,39 @@ type ModbusClientEvents = {
 
 // Modbus client class
 export class ModbusClient extends EventEmitter<ModbusClientEvents> {
-  private protocol: 'rtu' | 'ascii' = 'rtu'
-  private pendingRequest: {
+  #protocol: 'rtu' | 'ascii' = 'rtu'
+  #pendingRequest: {
     slaveId: number
     functionCode: number
     resolve: (response: ModbusResponse) => void
     reject: (error: Error) => void
     timeout: ReturnType<typeof setTimeout>
   } | null = null
-  private monitoringInterval: ReturnType<typeof setInterval> | null = null
-  private buffer: number[] = []
+  #monitoringInterval: ReturnType<typeof setInterval> | null = null
+  #buffer: number[] = []
   // ASCII state tracking
-  private asciiBuffer: string = ''
-  private asciiFrameStarted = false
+  #asciiBuffer: string = ''
+  #asciiFrameStarted = false
 
   setProtocol(protocol: 'rtu' | 'ascii') {
-    this.protocol = protocol
+    this.#protocol = protocol
   }
 
   async read(config: ModbusReadConfig): Promise<ModbusResponse> {
     return new Promise((resolve, reject) => {
-      if (this.pendingRequest) {
+      if (this.#pendingRequest) {
         reject(new ModbusBusyError())
         return
       }
 
-      const request = this.buildReadRequest(config)
-      this.pendingRequest = {
+      const request = this.#buildReadRequest(config)
+      this.#pendingRequest = {
         functionCode: config.functionCode,
         reject,
         resolve,
         slaveId: config.slaveId,
         timeout: setTimeout(() => {
-          this.pendingRequest = null
+          this.#pendingRequest = null
           reject(new ModbusTimeoutError())
         }, 3000),
       }
@@ -70,13 +92,13 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
 
       // 既にバッファ内に対象スレーブのレスポンスが残っている（連結フレーム等）場合の即時再解析
       if (
-        this.buffer.length > 0 ||
-        (this.protocol === 'ascii' && this.asciiBuffer.length > 0)
+        this.#buffer.length > 0 ||
+        (this.#protocol === 'ascii' && this.#asciiBuffer.length > 0)
       ) {
-        if (this.protocol === 'rtu') {
-          this.handleRTUResponse()
+        if (this.#protocol === 'rtu') {
+          this.#handleRTUResponse()
         } else {
-          this.handleASCIIResponse()
+          this.#handleASCIIResponse()
         }
       }
     })
@@ -84,19 +106,19 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
 
   async write(config: ModbusWriteConfig): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (this.pendingRequest) {
+      if (this.#pendingRequest) {
         reject(new ModbusBusyError())
         return
       }
 
-      const request = this.buildWriteRequest(config)
-      this.pendingRequest = {
+      const request = this.#buildWriteRequest(config)
+      this.#pendingRequest = {
         functionCode: config.functionCode,
         reject,
         resolve: () => resolve(),
         slaveId: config.slaveId,
         timeout: setTimeout(() => {
-          this.pendingRequest = null
+          this.#pendingRequest = null
           reject(new ModbusTimeoutError())
         }, 3000),
       }
@@ -108,7 +130,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   startMonitoring(config: ModbusReadConfig, interval = 1000) {
     this.stopMonitoring()
 
-    this.monitoringInterval = setInterval(async () => {
+    this.#monitoringInterval = setInterval(async () => {
       try {
         const response = await this.read(config)
         this.emit('response', response)
@@ -119,47 +141,47 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   }
 
   stopMonitoring() {
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval)
-      this.monitoringInterval = null
+    if (this.#monitoringInterval) {
+      clearInterval(this.#monitoringInterval)
+      this.#monitoringInterval = null
     }
   }
 
   handleResponse(data: Uint8Array) {
     // Append data to buffer
-    this.buffer.push(...Array.from(data))
+    this.#buffer.push(...Array.from(data))
 
-    if (this.protocol === 'rtu') {
-      this.handleRTUResponse()
+    if (this.#protocol === 'rtu') {
+      this.#handleRTUResponse()
     } else {
-      this.handleASCIIResponse()
+      this.#handleASCIIResponse()
     }
   }
 
-  private handleRTUResponse() {
-    while (this.buffer.length >= 5) {
-      const slaveId = this.buffer[0]
-      const functionCode = this.buffer[1]
+  #handleRTUResponse() {
+    while (this.#buffer.length >= 5) {
+      const slaveId = this.#buffer[0]
+      const functionCode = this.#buffer[1]
 
       // Check if this frame matches our pending request
       const isMatchingFrame =
-        this.pendingRequest &&
-        this.pendingRequest.slaveId === slaveId &&
+        this.#pendingRequest &&
+        this.#pendingRequest.slaveId === slaveId &&
         // 許可: 通常関数コード または 例外フレーム(function | 0x80)
-        (this.pendingRequest.functionCode === functionCode ||
+        (this.#pendingRequest.functionCode === functionCode ||
           (functionCode & 0x80 &&
-            (functionCode & 0x7f) === this.pendingRequest.functionCode))
+            (functionCode & 0x7f) === this.#pendingRequest.functionCode))
 
       if (!isMatchingFrame) {
         // If we have a pending request but frame doesn't match, try to advance buffer
-        if (this.pendingRequest) {
-          const resyncPosition = findFrameResyncPosition(this.buffer)
+        if (this.#pendingRequest) {
+          const resyncPosition = findFrameResyncPosition(this.#buffer)
           if (resyncPosition !== -1) {
-            this.buffer = this.buffer.slice(resyncPosition)
+            this.#buffer = this.#buffer.slice(resyncPosition)
             continue // Try again with advanced buffer
           } else {
             // No valid frame found, just advance by 1 byte and try again
-            this.buffer = this.buffer.slice(1)
+            this.#buffer = this.#buffer.slice(1)
             continue
           }
         }
@@ -168,15 +190,15 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
 
       // Error response check (exception frame length = 5 bytes: slave + fc + ex + CRC2)
       if (functionCode & 0x80) {
-        if (this.buffer.length < 5) return
-        if (!checkFrameCRC(this.buffer, 5)) {
-          this.handleError(new Error('CRC error'))
+        if (this.#buffer.length < 5) return
+        if (!checkFrameCRC(this.#buffer, 5)) {
+          this.#handleError(new Error('CRC error'))
           return
         }
-        const errorCode = this.buffer[2]
-        this.handleError(errorCode)
+        const errorCode = this.#buffer[2]
+        this.#handleError(errorCode)
         // 例外フレーム消費
-        this.buffer = this.buffer.slice(5)
+        this.#buffer = this.#buffer.slice(5)
         return
       }
 
@@ -188,73 +210,73 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         functionCode === 4
       ) {
         // Read function
-        const dataLength = this.buffer[2]
+        const dataLength = this.#buffer[2]
         responseLength = 3 + dataLength + 2 // slaveID + function + byte count + data + CRC
       } else {
         // Write function
         responseLength = 8 // fixed length
       }
 
-      if (this.buffer.length < responseLength) return
+      if (this.#buffer.length < responseLength) return
 
       // CRC check
-      if (!checkFrameCRC(this.buffer, responseLength)) {
-        this.handleError(new Error('CRC error'))
+      if (!checkFrameCRC(this.#buffer, responseLength)) {
+        this.#handleError(new Error('CRC error'))
         return
       }
 
       // Process response
-      this.processValidResponse(responseLength)
+      this.#processValidResponse(responseLength)
       return
     }
   }
 
-  private handleASCIIResponse() {
+  #handleASCIIResponse() {
     // Convert buffer to string to look for ASCII frame markers
-    const newData = String.fromCharCode(...this.buffer)
-    this.asciiBuffer += newData
-    this.buffer = [] // Clear the buffer as we've moved data to asciiBuffer
+    const newData = String.fromCharCode(...this.#buffer)
+    this.#asciiBuffer += newData
+    this.#buffer = [] // Clear the buffer as we've moved data to asciiBuffer
 
     // Process only one complete frame at a time (like RTU mode)
     // Look for start of frame ':'
-    if (!this.asciiFrameStarted) {
-      const startIndex = this.asciiBuffer.indexOf(':')
+    if (!this.#asciiFrameStarted) {
+      const startIndex = this.#asciiBuffer.indexOf(':')
       if (startIndex === -1) {
         // No start found, keep waiting
         return
       }
       // Remove everything before ':'
-      this.asciiBuffer = this.asciiBuffer.substring(startIndex)
-      this.asciiFrameStarted = true
+      this.#asciiBuffer = this.#asciiBuffer.substring(startIndex)
+      this.#asciiFrameStarted = true
     }
 
     // Look for end of frame \r\n
-    const endIndex = this.asciiBuffer.indexOf('\r\n')
+    const endIndex = this.#asciiBuffer.indexOf('\r\n')
     if (endIndex === -1) {
       // Frame not complete yet
       return
     }
 
     // Extract complete frame (including : but excluding \r\n)
-    const frameString = this.asciiBuffer.substring(0, endIndex)
-    this.asciiBuffer = this.asciiBuffer.substring(endIndex + 2)
-    this.asciiFrameStarted = false
+    const frameString = this.#asciiBuffer.substring(0, endIndex)
+    this.#asciiBuffer = this.#asciiBuffer.substring(endIndex + 2)
+    this.#asciiFrameStarted = false
 
     // Parse the frame
-    this.parseASCIIFrame(frameString)
+    this.#parseASCIIFrame(frameString)
   }
 
-  private parseASCIIFrame(frameString: string) {
+  #parseASCIIFrame(frameString: string) {
     // Frame should start with ':' and contain hex pairs
     if (frameString.length < 3 || frameString[0] !== ':') {
-      this.handleError(new Error('Invalid ASCII frame format'))
+      this.#handleError(new Error('Invalid ASCII frame format'))
       return
     }
 
     // Remove the ':' and parse hex pairs
     const hexString = frameString.substring(1)
     if (hexString.length % 2 !== 0) {
-      this.handleError(
+      this.#handleError(
         new Error('ASCII frame contains odd number of hex characters')
       )
       return
@@ -267,7 +289,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
 
       // Validate that both characters are valid hex digits
       if (!/^[0-9A-Fa-f]{2}$/.test(hexPair)) {
-        this.handleError(
+        this.#handleError(
           new Error(`Invalid hex pair in ASCII frame: ${hexPair}`)
         )
         return
@@ -279,7 +301,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
 
     // Need at least slave + function + LRC = 3 bytes
     if (frameBytes.length < 3) {
-      this.handleError(new Error('ASCII frame too short'))
+      this.#handleError(new Error('ASCII frame too short'))
       return
     }
 
@@ -289,12 +311,12 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     const calculatedLRC = calculateLRC(messageBytes)
 
     if (receivedLRC !== calculatedLRC) {
-      this.handleError(new Error('LRC error'))
+      this.#handleError(new Error('LRC error'))
       return
     }
 
     // Validate against pending request
-    if (!this.pendingRequest) {
+    if (!this.#pendingRequest) {
       return
     }
 
@@ -302,11 +324,11 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     const functionCode = messageBytes[1]
 
     if (
-      this.pendingRequest.slaveId !== slaveId ||
+      this.#pendingRequest.slaveId !== slaveId ||
       !(
-        this.pendingRequest.functionCode === functionCode ||
+        this.#pendingRequest.functionCode === functionCode ||
         (functionCode & 0x80 &&
-          (functionCode & 0x7f) === this.pendingRequest.functionCode)
+          (functionCode & 0x7f) === this.#pendingRequest.functionCode)
       )
     ) {
       return
@@ -315,21 +337,21 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     // Handle exception frame (function | 0x80)
     if (functionCode & 0x80) {
       if (messageBytes.length < 3) {
-        this.handleError(new Error('Invalid exception frame length'))
+        this.#handleError(new Error('Invalid exception frame length'))
         return
       }
       const errorCode = messageBytes[2]
-      this.handleError(errorCode)
+      this.#handleError(errorCode)
       return
     }
 
     // Process valid response - reuse existing RTU logic by simulating RTU frame
     // Convert ASCII frame back to RTU format for existing processing logic
-    this.processValidASCIIResponse(messageBytes)
+    this.#processValidASCIIResponse(messageBytes)
   }
 
-  private processValidASCIIResponse(messageBytes: number[]) {
-    if (!this.pendingRequest) return
+  #processValidASCIIResponse(messageBytes: number[]) {
+    if (!this.#pendingRequest) return
 
     const slaveId = messageBytes[0]
     const functionCode = messageBytes[1]
@@ -356,15 +378,15 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
       timestamp: new Date(),
     }
 
-    clearTimeout(this.pendingRequest.timeout)
-    this.pendingRequest.resolve(modbusResponse)
-    this.pendingRequest = null
+    clearTimeout(this.#pendingRequest.timeout)
+    this.#pendingRequest.resolve(modbusResponse)
+    this.#pendingRequest = null
   }
 
-  private processValidResponse(responseLength: number) {
-    if (!this.pendingRequest) return
+  #processValidResponse(responseLength: number) {
+    if (!this.#pendingRequest) return
 
-    const response = this.buffer.slice(0, responseLength)
+    const response = this.#buffer.slice(0, responseLength)
     const slaveId = response[0]
     const functionCode = response[1]
 
@@ -389,49 +411,49 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
       timestamp: new Date(),
     }
 
-    clearTimeout(this.pendingRequest.timeout)
-    this.pendingRequest.resolve(modbusResponse)
-    this.pendingRequest = null
+    clearTimeout(this.#pendingRequest.timeout)
+    this.#pendingRequest.resolve(modbusResponse)
+    this.#pendingRequest = null
 
     // Trim processed bytes from buffer
-    this.buffer = this.buffer.slice(responseLength)
+    this.#buffer = this.#buffer.slice(responseLength)
   }
 
-  private handleError(error: number | Error, attemptResync = true) {
-    if (!this.pendingRequest) return
+  #handleError(error: number | Error, attemptResync = true) {
+    if (!this.#pendingRequest) return
 
-    clearTimeout(this.pendingRequest.timeout)
+    clearTimeout(this.#pendingRequest.timeout)
 
     if (typeof error === 'number') {
       // Use the new ModbusExceptionError for consistency
-      this.pendingRequest.reject(new ModbusExceptionError(error))
+      this.#pendingRequest.reject(new ModbusExceptionError(error))
     } else {
-      this.pendingRequest.reject(error)
+      this.#pendingRequest.reject(error)
     }
 
-    this.pendingRequest = null
+    this.#pendingRequest = null
 
     // Attempt buffer resynchronization for RTU protocol
-    if (attemptResync && this.protocol === 'rtu' && this.buffer.length > 0) {
-      const resyncPosition = findFrameResyncPosition(this.buffer)
+    if (attemptResync && this.#protocol === 'rtu' && this.#buffer.length > 0) {
+      const resyncPosition = findFrameResyncPosition(this.#buffer)
       if (resyncPosition !== -1) {
         // Found a potential frame start, advance buffer to that position
-        this.buffer = this.buffer.slice(resyncPosition)
+        this.#buffer = this.#buffer.slice(resyncPosition)
       } else {
         // No candidate found, clear buffer completely
-        this.buffer = []
+        this.#buffer = []
       }
     } else {
       // For ASCII or when resync disabled, clear buffer completely
-      this.buffer = []
+      this.#buffer = []
     }
   }
 
-  private buildReadRequest(config: ModbusReadConfig): Uint8Array {
-    return buildReadRequest(config, this.protocol)
+  #buildReadRequest(config: ModbusReadConfig): Uint8Array {
+    return buildReadRequest(config, this.#protocol)
   }
 
-  private buildWriteRequest(config: ModbusWriteConfig): Uint8Array {
-    return buildWriteRequest(config, this.protocol)
+  #buildWriteRequest(config: ModbusWriteConfig): Uint8Array {
+    return buildWriteRequest(config, this.#protocol)
   }
 }

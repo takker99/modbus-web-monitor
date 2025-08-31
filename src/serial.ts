@@ -1,4 +1,10 @@
-import type { SerialConfig } from './types.ts'
+// Serial communication configuration types
+export interface SerialConfig {
+  baudRate: number
+  dataBits: 7 | 8
+  parity: 'none' | 'even' | 'odd'
+  stopBits: 1 | 2
+}
 
 // Event types for SerialManager
 type SerialManagerEvents = {

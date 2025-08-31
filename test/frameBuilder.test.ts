@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildReadRequest, buildWriteRequest } from '../src/frameBuilder.ts'
-import type { ModbusReadConfig, ModbusWriteConfig } from '../src/types.ts'
+import type { ModbusReadConfig, ModbusWriteConfig } from '../src/modbus.ts'
 
 describe('Frame Builder', () => {
   describe('buildReadRequest', () => {
