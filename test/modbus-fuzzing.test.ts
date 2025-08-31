@@ -1,6 +1,8 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { calculateCRC16, calculateLRC, ModbusClient } from '../src/modbus.ts'
+import { calculateCRC16 } from '../src/crc.ts'
+import { calculateLRC } from '../src/lrc.ts'
+import { ModbusClient } from '../src/modbus.ts'
 
 describe('Frame Fuzzing Tests', () => {
   describe('RTU Frame Generation and Validation', () => {
@@ -119,12 +121,13 @@ describe('Frame Fuzzing Tests', () => {
             frame.push(corruptCRC & 0xff, (corruptCRC >> 8) & 0xff)
 
             const client = new ModbusClient()
-            const errorSpy = []
+            const errorSpy: Error[] = []
             client.on('error', (error) => errorSpy.push(error))
 
             // Set up a pending request to trigger frame processing
             const _promise = client
               .read({
+                // @ts-expect-error For test case
                 functionCode: functionCode as 3 | 6,
                 quantity: 1,
                 slaveId,
@@ -243,12 +246,13 @@ describe('Frame Fuzzing Tests', () => {
             const client = new ModbusClient()
             client.setProtocol('ascii')
 
-            const errorSpy = []
+            const errorSpy: Error[] = []
             client.on('error', (error) => errorSpy.push(error))
 
             // Set up pending request
             const _promise = client
               .read({
+                //@ts-expect-error For test case
                 functionCode: functionCode as 3 | 6,
                 quantity: 1,
                 slaveId,

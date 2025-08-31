@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { calculateCRC16, ModbusClient } from '../src/modbus.ts'
+import { calculateCRC16 } from '../src/crc.ts'
+import { FUNCTION_CODE_LABELS } from '../src/functionCodes.ts'
+import { ModbusClient } from '../src/modbus.ts'
 
 describe('Timing Edge Case Tests', () => {
   beforeEach(() => {
@@ -334,6 +336,7 @@ describe('Timing Edge Case Tests', () => {
       const mockRead = vi.spyOn(client, 'read').mockResolvedValue({
         data: [0x1234],
         functionCode: 3,
+        functionCodeLabel: FUNCTION_CODE_LABELS[3],
         slaveId: 1,
         timestamp: new Date(),
       })

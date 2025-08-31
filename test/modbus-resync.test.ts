@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { calculateCRC16 } from '../src/crc.ts'
 import {
-  calculateCRC16,
   findFrameResyncPosition,
   isPlausibleFrameStart,
-  ModbusClient,
-} from '../src/modbus.ts'
+} from '../src/frameParser.ts'
+import { ModbusClient } from '../src/modbus.ts'
 
 describe('Buffer Resynchronization', () => {
   describe('isPlausibleFrameStart', () => {

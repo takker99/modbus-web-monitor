@@ -1,23 +1,4 @@
-import { EventEmitter } from './serial.ts'
-import type {
-  ModbusReadConfig,
-  ModbusResponse,
-  ModbusWriteConfig,
-} from './types.ts'
-
-// Re-export functions and constants for backwards compatibility
-export { calculateCRC16 } from './crc.ts'
-export {
-  findFrameResyncPosition,
-  isPlausibleFrameStart,
-  parseBitResponse,
-  parseRegisterResponse,
-} from './frameParser.ts'
-export { FUNCTION_CODE_LABELS } from './functionCodes.ts'
-export { calculateLRC } from './lrc.ts'
-
 // Import the new modular functions
-import { calculateCRC16 } from './crc.ts'
 import {
   ModbusBusyError,
   ModbusExceptionError,
@@ -25,12 +6,19 @@ import {
 } from './errors.ts'
 import { buildReadRequest, buildWriteRequest } from './frameBuilder.ts'
 import {
+  checkFrameCRC,
   findFrameResyncPosition,
   parseBitResponse,
   parseRegisterResponse,
 } from './frameParser.ts'
 import { FUNCTION_CODE_LABELS } from './functionCodes.ts'
 import { calculateLRC } from './lrc.ts'
+import { EventEmitter } from './serial.ts'
+import type {
+  ModbusReadConfig,
+  ModbusResponse,
+  ModbusWriteConfig,
+} from './types.ts'
 
 // Event types for ModbusClient
 type ModbusClientEvents = {
@@ -181,10 +169,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
       // Error response check (exception frame length = 5 bytes: slave + fc + ex + CRC2)
       if (functionCode & 0x80) {
         if (this.buffer.length < 5) return
-        const messageWithoutCRC = this.buffer.slice(0, 3)
-        const receivedCRC = (this.buffer[4] << 8) | this.buffer[3]
-        const calculatedCRC = calculateCRC16(messageWithoutCRC)
-        if (receivedCRC !== calculatedCRC) {
+        if (!checkFrameCRC(this.buffer, 5)) {
           this.handleError(new Error('CRC error'))
           return
         }
@@ -213,12 +198,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
       if (this.buffer.length < responseLength) return
 
       // CRC check
-      const messageWithoutCRC = this.buffer.slice(0, responseLength - 2)
-      const receivedCRC =
-        (this.buffer[responseLength - 1] << 8) | this.buffer[responseLength - 2]
-      const calculatedCRC = calculateCRC16(messageWithoutCRC)
-
-      if (receivedCRC !== calculatedCRC) {
+      if (!checkFrameCRC(this.buffer, responseLength)) {
         this.handleError(new Error('CRC error'))
         return
       }

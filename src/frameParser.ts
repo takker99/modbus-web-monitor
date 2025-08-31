@@ -172,12 +172,7 @@ export function parseRTUFrame(buffer: number[]): ParseResult<ParsedFrame> {
   }
 
   // Validate CRC
-  const messageWithoutCRC = buffer.slice(0, expectedLength - 2)
-  const receivedCRC =
-    (buffer[expectedLength - 1] << 8) | buffer[expectedLength - 2]
-  const calculatedCRC = calculateCRC16(messageWithoutCRC)
-
-  if (receivedCRC !== calculatedCRC) {
+  if (checkFrameCRC(buffer, expectedLength)) {
     return { error: new ModbusCRCError(), success: false }
   }
 
@@ -307,4 +302,16 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
     },
     success: true,
   }
+}
+
+export function checkFrameCRC(
+  buffer: number[],
+  responseLength: number
+): boolean {
+  // CRC check
+  const messageWithoutCRC = buffer.slice(0, responseLength - 2)
+  const receivedCRC =
+    (buffer[responseLength - 1] << 8) | buffer[responseLength - 2]
+
+  return receivedCRC === calculateCRC16(messageWithoutCRC)
 }

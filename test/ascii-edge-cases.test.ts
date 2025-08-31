@@ -1,6 +1,7 @@
 // Test file to validate ASCII edge cases and identify any gaps
 import { describe, expect, it } from 'vitest'
-import { calculateLRC, ModbusClient } from '../src/modbus.ts'
+import { calculateLRC } from '../src/lrc.ts'
+import { ModbusClient } from '../src/modbus.ts'
 
 describe('ASCII Edge Cases Analysis', () => {
   it('handles invalid hex characters', async () => {

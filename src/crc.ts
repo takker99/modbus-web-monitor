@@ -8,7 +8,7 @@ export function calculateCRC16(data: number[]): number {
       if (crc & 0x0001) {
         crc = (crc >> 1) ^ 0xa001
       } else {
-        crc = crc >> 1
+        crc >>= 1
       }
     }
   }

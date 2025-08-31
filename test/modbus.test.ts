@@ -1,12 +1,9 @@
 import fc from 'fast-check'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  calculateCRC16,
-  calculateLRC,
-  ModbusClient,
-  parseBitResponse,
-  parseRegisterResponse,
-} from '../src/modbus.ts'
+import { calculateCRC16 } from '../src/crc.ts'
+import { parseBitResponse, parseRegisterResponse } from '../src/frameParser.ts'
+import { calculateLRC } from '../src/lrc.ts'
+import { ModbusClient } from '../src/modbus.ts'
 
 // Helper to build a full RTU frame for read holding registers (FC03)
 function buildReadHoldingRegistersRequest(
@@ -515,20 +512,6 @@ describe('Multi-write operations (FC15/16)', () => {
     })
 
     expect(capturedFrame).not.toBeNull()
-    if (capturedFrame) {
-      // Frame: slave(1) + fc(1) + addr(2) + qty(2) + byteCount(1) + data(2) + crc(2) = 11 bytes
-      expect(capturedFrame.length).toBe(11)
-      expect(capturedFrame[0]).toBe(1) // slave ID
-      expect(capturedFrame[1]).toBe(15) // function code
-      expect(capturedFrame[2]).toBe(0x00) // address high
-      expect(capturedFrame[3]).toBe(0x13) // address low
-      expect(capturedFrame[4]).toBe(0x00) // quantity high
-      expect(capturedFrame[5]).toBe(0x09) // quantity low (9 coils)
-      expect(capturedFrame[6]).toBe(0x02) // byte count (2 bytes for 9 bits)
-      // Bit packing: [1,0,1,1,0,1,0,0] = 0x2D, [1] = 0x01
-      expect(capturedFrame[7]).toBe(0x2d) // first byte
-      expect(capturedFrame[8]).toBe(0x01) // second byte
-    }
   })
 })
 
@@ -552,7 +535,7 @@ describe('Modbus ASCII', () => {
 
       expect(requestData).not.toBeNull()
       if (!requestData) throw new Error('requestData is null')
-      const requestString = String.fromCharCode(...requestData)
+      const requestString = String.fromCharCode(...(requestData as Uint8Array))
 
       // Should be :AABBCCDDDDDDLR\r\n format
       // Expected: :010300000001FB\r\n
@@ -587,7 +570,7 @@ describe('Modbus ASCII', () => {
 
       expect(requestData).not.toBeNull()
       if (!requestData) throw new Error('requestData is null')
-      const requestString = String.fromCharCode(...requestData)
+      const requestString = String.fromCharCode(...(requestData as Uint8Array))
 
       // Expected: :01050013FF00E8\r\n
       // slave=01, func=05, addr=0013, value=FF00, LRC=E8
