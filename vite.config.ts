@@ -1,12 +1,12 @@
-import preact from '@preact/preset-vite'
-import { defineConfig } from 'vite'
+import preact from "@preact/preset-vite";
+import { defineConfig } from "vite";
 
 export default defineConfig({
   build: {
-    outDir: 'dist',
+    outDir: "dist",
     rollupOptions: {
       input: {
-        main: './index.html',
+        main: "./index.html",
       },
     },
     sourcemap: true,
@@ -14,12 +14,12 @@ export default defineConfig({
   plugins: [preact()],
   resolve: {
     alias: {
-      '@': '/src',
+      "@": "/src",
     },
   },
-  root: '.',
+  root: ".",
   server: {
     open: true,
     port: 3000,
   },
-})
+});

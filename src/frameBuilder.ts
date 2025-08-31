@@ -1,15 +1,15 @@
 // Pure functions for building Modbus frames (RTU and ASCII)
 
-import { calculateCRC16 } from './crc.ts'
-import { calculateLRC } from './lrc.ts'
-import type { ModbusReadConfig, ModbusWriteConfig } from './modbus.ts'
+import { calculateCRC16 } from "./crc.ts";
+import { calculateLRC } from "./lrc.ts";
+import type { ModbusReadConfig, ModbusWriteConfig } from "./modbus.ts";
 
-export type ModbusProtocol = 'rtu' | 'ascii'
+export type ModbusProtocol = "rtu" | "ascii";
 
 // Build a Modbus read request frame
 export function buildReadRequest(
   config: ModbusReadConfig,
-  protocol: ModbusProtocol = 'rtu'
+  protocol: ModbusProtocol = "rtu",
 ): Uint8Array {
   const request = [
     config.slaveId,
@@ -18,22 +18,24 @@ export function buildReadRequest(
     config.startAddress & 0xff,
     (config.quantity >> 8) & 0xff,
     config.quantity & 0xff,
-  ]
+  ];
 
-  return buildFrame(request, protocol)
+  return buildFrame(request, protocol);
 }
 
 // Build a Modbus write request frame
 export function buildWriteRequest(
   config: ModbusWriteConfig,
-  protocol: ModbusProtocol = 'rtu'
+  protocol: ModbusProtocol = "rtu",
 ): Uint8Array {
-  let request: number[]
+  let request: number[];
 
   switch (config.functionCode) {
     case 5: {
       // Write single coil
-      const value = Array.isArray(config.value) ? config.value[0] : config.value
+      const value = Array.isArray(config.value)
+        ? config.value[0]
+        : config.value;
       request = [
         config.slaveId,
         config.functionCode,
@@ -41,12 +43,14 @@ export function buildWriteRequest(
         config.address & 0xff,
         value ? 0xff : 0x00,
         0x00,
-      ]
-      break
+      ];
+      break;
     }
     case 6: {
       // Write single register
-      const value = Array.isArray(config.value) ? config.value[0] : config.value
+      const value = Array.isArray(config.value)
+        ? config.value[0]
+        : config.value;
       request = [
         config.slaveId,
         config.functionCode,
@@ -54,22 +58,22 @@ export function buildWriteRequest(
         config.address & 0xff,
         (value >> 8) & 0xff,
         value & 0xff,
-      ]
-      break
+      ];
+      break;
     }
     case 15: {
       // Write multiple coils (FC15)
       if (!Array.isArray(config.value)) {
-        throw new Error('FC15 requires value to be an array of bits (0/1)')
+        throw new Error("FC15 requires value to be an array of bits (0/1)");
       }
-      const quantity = config.value.length
-      const byteCount = Math.ceil(quantity / 8)
-      const coilBytes: number[] = new Array(byteCount).fill(0)
+      const quantity = config.value.length;
+      const byteCount = Math.ceil(quantity / 8);
+      const coilBytes: number[] = new Array(byteCount).fill(0);
       config.value.forEach((bit, i) => {
         if (bit) {
-          coilBytes[Math.floor(i / 8)] |= 1 << (i % 8)
+          coilBytes[Math.floor(i / 8)] |= 1 << (i % 8);
         }
-      })
+      });
       request = [
         config.slaveId,
         config.functionCode,
@@ -79,19 +83,21 @@ export function buildWriteRequest(
         quantity & 0xff,
         byteCount,
         ...coilBytes,
-      ]
-      break
+      ];
+      break;
     }
     case 16: {
       // Write multiple registers (FC16)
       if (!Array.isArray(config.value)) {
-        throw new Error('FC16 requires value to be an array of register values')
+        throw new Error(
+          "FC16 requires value to be an array of register values",
+        );
       }
-      const quantity = config.value.length
-      const byteCount = quantity * 2
-      const registers: number[] = []
+      const quantity = config.value.length;
+      const byteCount = quantity * 2;
+      const registers: number[] = [];
       for (const v of config.value) {
-        registers.push((v >> 8) & 0xff, v & 0xff)
+        registers.push((v >> 8) & 0xff, v & 0xff);
       }
       request = [
         config.slaveId,
@@ -102,33 +108,33 @@ export function buildWriteRequest(
         quantity & 0xff,
         byteCount,
         ...registers,
-      ]
-      break
+      ];
+      break;
     }
     default:
-      throw new Error(`Unsupported function code: ${config.functionCode}`)
+      throw new Error(`Unsupported function code: ${config.functionCode}`);
   }
 
-  return buildFrame(request, protocol)
+  return buildFrame(request, protocol);
 }
 
 // Build a complete frame with checksum for the specified protocol
 function buildFrame(request: number[], protocol: ModbusProtocol): Uint8Array {
-  if (protocol === 'rtu') {
-    const crcValue = calculateCRC16(request)
-    request.push(crcValue & 0xff, (crcValue >> 8) & 0xff)
-    return new Uint8Array(request)
+  if (protocol === "rtu") {
+    const crcValue = calculateCRC16(request);
+    request.push(crcValue & 0xff, (crcValue >> 8) & 0xff);
+    return new Uint8Array(request);
   }
   // ASCII mode: format as :AABBCC...DDLR\r\n
-  const lrcValue = calculateLRC(request)
-  request.push(lrcValue)
+  const lrcValue = calculateLRC(request);
+  request.push(lrcValue);
 
   // Convert to ASCII hex format
   const hexString = request
-    .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
-    .join('')
+    .map((byte) => byte.toString(16).padStart(2, "0").toUpperCase())
+    .join("");
 
   // Create ASCII frame: : + hex data + \r\n
-  const asciiFrame = `:${hexString}\r\n`
-  return new Uint8Array(Array.from(asciiFrame).map((c) => c.charCodeAt(0)))
+  const asciiFrame = `:${hexString}\r\n`;
+  return new Uint8Array(Array.from(asciiFrame).map((c) => c.charCodeAt(0)));
 }
