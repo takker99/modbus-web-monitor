@@ -519,7 +519,7 @@ describe('Modbus ASCII', () => {
   describe('Frame building', () => {
     it('builds ASCII read request with proper format', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       let requestData: Uint8Array | null = null
       client.on('request', (data) => {
@@ -554,7 +554,7 @@ describe('Modbus ASCII', () => {
 
     it('builds ASCII write request with proper format', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       let requestData: Uint8Array | null = null
       client.on('request', (data) => {
@@ -590,7 +590,7 @@ describe('Modbus ASCII', () => {
   describe('Frame parsing', () => {
     it('parses valid ASCII response frame', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const promise = client.read({
         functionCode: 3,
@@ -614,7 +614,7 @@ describe('Modbus ASCII', () => {
 
     it('parses FC02 discrete inputs in ASCII mode', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const promise = client.read({
         functionCode: 2,
@@ -637,7 +637,7 @@ describe('Modbus ASCII', () => {
 
     it('parses FC04 input registers in ASCII mode', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const promise = client.read({
         functionCode: 4,
@@ -660,7 +660,7 @@ describe('Modbus ASCII', () => {
 
     it('rejects frame with bad LRC', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const promise = client.read({
         functionCode: 3,
@@ -680,7 +680,7 @@ describe('Modbus ASCII', () => {
 
     it('handles exception frame in ASCII', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const promise = client.read({
         functionCode: 3,
@@ -700,7 +700,7 @@ describe('Modbus ASCII', () => {
 
     it('handles partial frame delivery', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const promise = client.read({
         functionCode: 3,
@@ -724,7 +724,7 @@ describe('Modbus ASCII', () => {
 
     it('handles multiple concatenated frames', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const p1 = client.read({
         functionCode: 3,
@@ -756,7 +756,7 @@ describe('Modbus ASCII', () => {
 
     it('handles garbage before start character', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const promise = client.read({
         functionCode: 3,
@@ -777,7 +777,7 @@ describe('Modbus ASCII', () => {
 
     it('rejects frame with invalid hex characters', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const promise = client.read({
         functionCode: 3,
@@ -797,7 +797,7 @@ describe('Modbus ASCII', () => {
 
     it('rejects frame with odd number of hex characters', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const promise = client.read({
         functionCode: 3,
@@ -817,7 +817,7 @@ describe('Modbus ASCII', () => {
 
     it('rejects frame that is too short', async () => {
       const client = new ModbusClient()
-      client.setProtocol('ascii')
+      client.protocol = 'ascii'
 
       const promise = client.read({
         functionCode: 3,

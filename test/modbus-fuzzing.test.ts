@@ -197,7 +197,7 @@ describe('Frame Fuzzing Tests', () => {
           fc.string({ maxLength: 100, minLength: 1 }),
           (randomString) => {
             const client = new ModbusClient()
-            client.setProtocol('ascii')
+            client.protocol = 'ascii'
 
             // Convert string to bytes for handleResponse
             const bytes = new Uint8Array(
@@ -244,7 +244,7 @@ describe('Frame Fuzzing Tests', () => {
             )
 
             const client = new ModbusClient()
-            client.setProtocol('ascii')
+            client.protocol = 'ascii'
 
             const errorSpy: Error[] = []
             client.on('error', (error) => errorSpy.push(error))

@@ -4,7 +4,11 @@ import {
   ModbusExceptionError,
   ModbusTimeoutError,
 } from './errors.ts'
-import { buildReadRequest, buildWriteRequest } from './frameBuilder.ts'
+import {
+  buildReadRequest,
+  buildWriteRequest,
+  type ModbusProtocol,
+} from './frameBuilder.ts'
 import {
   checkFrameCRC,
   findFrameResyncPosition,
@@ -51,7 +55,7 @@ type ModbusClientEvents = {
 
 // Modbus client class
 export class ModbusClient extends EventEmitter<ModbusClientEvents> {
-  #protocol: 'rtu' | 'ascii' = 'rtu'
+  #protocol: ModbusProtocol = 'rtu'
   #pendingRequest: {
     slaveId: number
     functionCode: number
@@ -65,7 +69,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   #asciiBuffer: string = ''
   #asciiFrameStarted = false
 
-  setProtocol(protocol: 'rtu' | 'ascii') {
+  set protocol(protocol: ModbusProtocol) {
     this.#protocol = protocol
   }
 
@@ -76,7 +80,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         return
       }
 
-      const request = this.#buildReadRequest(config)
+      const request = buildReadRequest(config, this.#protocol)
       this.#pendingRequest = {
         functionCode: config.functionCode,
         reject,
@@ -111,7 +115,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         return
       }
 
-      const request = this.#buildWriteRequest(config)
+      const request = buildWriteRequest(config, this.#protocol)
       this.#pendingRequest = {
         functionCode: config.functionCode,
         reject,
@@ -447,13 +451,5 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
       // For ASCII or when resync disabled, clear buffer completely
       this.#buffer = []
     }
-  }
-
-  #buildReadRequest(config: ModbusReadConfig): Uint8Array {
-    return buildReadRequest(config, this.#protocol)
-  }
-
-  #buildWriteRequest(config: ModbusWriteConfig): Uint8Array {
-    return buildWriteRequest(config, this.#protocol)
   }
 }

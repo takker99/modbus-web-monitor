@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'preact/hooks'
+import type { ModbusProtocol } from './frameBuilder.ts'
 import type { WriteFunctionCode } from './functionCodes.ts'
 import { isReadFunctionCode, isWriteFunctionCode } from './functionCodes.ts'
 import type {
@@ -44,7 +45,7 @@ export function App() {
 
   // Modbus configuration state
   const [slaveId, setSlaveId] = useState(1)
-  const [protocol, setProtocol] = useState<'rtu' | 'ascii'>('rtu')
+  const [protocol, setProtocol] = useState<ModbusProtocol>('rtu')
   const [readConfig, setReadConfig] = useState<
     Omit<ModbusReadConfig, 'slaveId'>
   >({
@@ -158,7 +159,7 @@ export function App() {
     }
 
     setupEventListeners()
-    modbusClient.setProtocol(protocol)
+    modbusClient.protocol = protocol
 
     return () => {
       // Cleanup
@@ -274,9 +275,9 @@ export function App() {
     }
   }
 
-  const handleProtocolChange = (newProtocol: 'rtu' | 'ascii') => {
+  const handleProtocolChange = (newProtocol: ModbusProtocol) => {
     setProtocol(newProtocol)
-    modbusClient.setProtocol(newProtocol)
+    modbusClient.protocol = newProtocol
     addLog('Info', `Protocol changed to ${newProtocol.toUpperCase()}`)
   }
 
@@ -611,7 +612,7 @@ export function App() {
                 disabled={isConnected}
                 id="protocol"
                 onChange={(e) =>
-                  handleProtocolChange(e.currentTarget.value as 'rtu' | 'ascii')
+                  handleProtocolChange(e.currentTarget.value as ModbusProtocol)
                 }
                 value={protocol}
               >
