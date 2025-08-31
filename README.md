@@ -16,6 +16,30 @@ Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Ser
 - CRC16 (RTU) and LRC (ASCII) validation for frame integrity
 - Simple buffering & response correlation with timeout handling
 - Clean, responsive UI (desktop & mobile)
+- **Progressive Web App (PWA) support** with offline functionality and app installation
+
+## PWA Features
+
+This application is a Progressive Web App that provides:
+
+- **Offline Capability**: After the first online load, the app works offline (UI only - serial communication requires hardware connection)
+- **App Installation**: Install prompt appears on supported browsers (Chrome/Edge) for a native app-like experience  
+- **Service Worker**: Automatic caching of core assets with cache invalidation on new deployments
+- **App Manifest**: Proper metadata for installation and app behavior
+
+### Installing as PWA
+
+1. Open the app in a supported browser (Chrome 89+, Edge)
+2. Look for the "Install" prompt in the address bar or browser menu
+3. Click "Install" to add the app to your desktop/home screen
+4. The app will behave like a native application with its own window
+
+### Offline Usage
+
+- Load the app once while online to cache all assets
+- The UI remains fully functional offline
+- Serial communication will only work when hardware is connected and browser has retained permissions
+- After reconnecting online, any cached updates will be automatically applied
 
 ## Coverage
 
@@ -54,6 +78,7 @@ Coverage reports include:
 | Legacy DOM UI (non-Preact) | `src/ui.ts` + `src/main.ts` | Earlier vanilla DOM event driven UI (still present; not used when using `main.tsx`) |
 | Modbus protocol | `src/modbus.ts` | Building requests, parsing RTU/ASCII responses, CRC/LRC validation, monitoring loop |
 | Serial abstraction | `src/serial.ts` | Web Serial API wrapper + event emitter |
+| PWA Support | `public/sw.js`, `public/manifest.json` | Service worker for offline caching, web app manifest for installation |
 | Types | `src/types.ts` | Shared TypeScript interfaces |
 
 The Preact entry point is `index.html` -> `src/main.tsx` -> `App`.
