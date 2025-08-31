@@ -5,104 +5,32 @@ import type {
   ModbusWriteConfig,
 } from './types.ts'
 
-// CRC16 Modbus calculation function (exported for tests)
-export function calculateCRC16(data: number[]): number {
-  let crc = 0xffff
-  for (const byte of data) {
-    crc ^= byte
-    for (let i = 0; i < 8; i++) {
-      if (crc & 0x0001) {
-        crc = (crc >> 1) ^ 0xa001
-      } else {
-        crc = crc >> 1
-      }
-    }
-  }
-  return crc
-}
+// Re-export functions and constants for backwards compatibility
+export { calculateCRC16 } from './crc.ts'
+export {
+  findFrameResyncPosition,
+  isPlausibleFrameStart,
+  parseBitResponse,
+  parseRegisterResponse,
+} from './frameParser.ts'
+export { FUNCTION_CODE_LABELS } from './functionCodes.ts'
+export { calculateLRC } from './lrc.ts'
 
-// LRC (Longitudinal Redundancy Check) calculation for Modbus ASCII (exported for tests)
-export function calculateLRC(data: number[]): number {
-  let lrc = 0
-  for (const byte of data) {
-    lrc += byte
-  }
-  return (256 - (lrc % 256)) % 256
-}
-
-// Function code metadata mapping for easy extension and UI labeling
-export const FUNCTION_CODE_LABELS: Record<number, string> = {
-  1: 'Coils',
-  2: 'Discrete Inputs',
-  3: 'Holding Registers',
-  4: 'Input Registers',
-  5: 'Single Coil Write',
-  6: 'Single Register Write',
-  15: 'Multiple Coils Write',
-  16: 'Multiple Registers Write',
-} as const
-
-// Utility function to parse bit-based responses (FC01/FC02)
-export function parseBitResponse(
-  responseData: number[],
-  dataLength: number
-): number[] {
-  const data: number[] = []
-  for (let i = 0; i < dataLength; i++) {
-    const byte = responseData[3 + i]
-    for (let bit = 0; bit < 8; bit++) {
-      data.push((byte >> bit) & 1)
-    }
-  }
-  return data
-}
-
-// Utility function to parse register-based responses (FC03/FC04)
-export function parseRegisterResponse(
-  responseData: number[],
-  dataLength: number
-): number[] {
-  const data: number[] = []
-  for (let i = 0; i < dataLength; i += 2) {
-    const value = (responseData[3 + i] << 8) | responseData[3 + i + 1]
-    data.push(value)
-  }
-  return data
-}
-
-// Utility function to check if a byte sequence looks like a valid Modbus RTU frame start
-export function isPlausibleFrameStart(
-  buffer: number[],
-  startIndex: number
-): boolean {
-  if (startIndex >= buffer.length) return false
-
-  const slaveId = buffer[startIndex]
-  const functionCode = buffer[startIndex + 1] || 0
-
-  // Valid slave ID range: 1-247 (0x01-0xF7)
-  if (slaveId < 1 || slaveId > 247) return false
-
-  // Valid function codes: 1-6, 15-16, or exception responses (0x81-0x86, 0x8F, 0x90)
-  const validFunctionCodes = [1, 2, 3, 4, 5, 6, 15, 16]
-  const isValidFunction = validFunctionCodes.includes(functionCode)
-  const isException =
-    (functionCode & 0x80) !== 0 &&
-    validFunctionCodes.includes(functionCode & 0x7f)
-
-  return isValidFunction || isException
-}
-
-// Find the next plausible frame start position in buffer for resynchronization
-export function findFrameResyncPosition(buffer: number[]): number {
-  // Start scanning from position 1 (skip current corrupted frame start)
-  for (let i = 1; i < buffer.length - 1; i++) {
-    if (isPlausibleFrameStart(buffer, i)) {
-      return i
-    }
-  }
-  return -1 // No candidate found
-}
+// Import the new modular functions
+import { calculateCRC16 } from './crc.ts'
+import {
+  ModbusBusyError,
+  ModbusExceptionError,
+  ModbusTimeoutError,
+} from './errors.ts'
+import { buildReadRequest, buildWriteRequest } from './frameBuilder.ts'
+import {
+  findFrameResyncPosition,
+  parseBitResponse,
+  parseRegisterResponse,
+} from './frameParser.ts'
+import { FUNCTION_CODE_LABELS } from './functionCodes.ts'
+import { calculateLRC } from './lrc.ts'
 
 // Event types for ModbusClient
 type ModbusClientEvents = {
@@ -134,7 +62,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   async read(config: ModbusReadConfig): Promise<ModbusResponse> {
     return new Promise((resolve, reject) => {
       if (this.pendingRequest) {
-        reject(new Error('Another request is in progress'))
+        reject(new ModbusBusyError())
         return
       }
 
@@ -146,7 +74,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         slaveId: config.slaveId,
         timeout: setTimeout(() => {
           this.pendingRequest = null
-          reject(new Error('Request timed out'))
+          reject(new ModbusTimeoutError())
         }, 3000),
       }
 
@@ -169,7 +97,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   async write(config: ModbusWriteConfig): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.pendingRequest) {
-        reject(new Error('Another request is in progress'))
+        reject(new ModbusBusyError())
         return
       }
 
@@ -181,7 +109,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         slaveId: config.slaveId,
         timeout: setTimeout(() => {
           this.pendingRequest = null
-          reject(new Error('Request timed out'))
+          reject(new ModbusTimeoutError())
         }, 3000),
       }
 
@@ -492,19 +420,8 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     clearTimeout(this.pendingRequest.timeout)
 
     if (typeof error === 'number') {
-      const errorMessages: { [key: number]: string } = {
-        1: 'Illegal function',
-        2: 'Illegal data address (address does not exist)',
-        3: 'Illegal data value',
-        4: 'Slave device failure',
-        5: 'Acknowledge',
-        6: 'Slave device busy',
-        8: 'Memory parity error',
-        10: 'Gateway path unavailable',
-        11: 'Gateway target device failed to respond',
-      }
-      const errorMessage = errorMessages[error] || `Modbus error ${error}`
-      this.pendingRequest.reject(new Error(`${errorMessage} (code: ${error})`))
+      // Use the new ModbusExceptionError for consistency
+      this.pendingRequest.reject(new ModbusExceptionError(error))
     } else {
       this.pendingRequest.reject(error)
     }
@@ -528,125 +445,10 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   }
 
   private buildReadRequest(config: ModbusReadConfig): Uint8Array {
-    const request = [
-      config.slaveId,
-      config.functionCode,
-      (config.startAddress >> 8) & 0xff,
-      config.startAddress & 0xff,
-      (config.quantity >> 8) & 0xff,
-      config.quantity & 0xff,
-    ]
-
-    if (this.protocol === 'rtu') {
-      const crcValue = calculateCRC16(request)
-      request.push(crcValue & 0xff, (crcValue >> 8) & 0xff)
-      return new Uint8Array(request)
-    } else {
-      // ASCII mode: format as :AABBCC...DDLR\r\n
-      const lrcValue = calculateLRC(request)
-      request.push(lrcValue)
-
-      // Convert to ASCII hex format
-      const hexString = request
-        .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
-        .join('')
-
-      // Create ASCII frame: : + hex data + \r\n
-      const asciiFrame = `:${hexString}\r\n`
-      return new Uint8Array(Array.from(asciiFrame).map((c) => c.charCodeAt(0)))
-    }
+    return buildReadRequest(config, this.protocol)
   }
 
   private buildWriteRequest(config: ModbusWriteConfig): Uint8Array {
-    let request: number[]
-
-    if (config.functionCode === 5) {
-      // Write single coil
-      const value = Array.isArray(config.value) ? config.value[0] : config.value
-      request = [
-        config.slaveId,
-        config.functionCode,
-        (config.address >> 8) & 0xff,
-        config.address & 0xff,
-        value ? 0xff : 0x00,
-        0x00,
-      ]
-    } else if (config.functionCode === 6) {
-      // Write single register
-      const value = Array.isArray(config.value) ? config.value[0] : config.value
-      request = [
-        config.slaveId,
-        config.functionCode,
-        (config.address >> 8) & 0xff,
-        config.address & 0xff,
-        (value >> 8) & 0xff,
-        value & 0xff,
-      ]
-    } else if (config.functionCode === 15) {
-      // Write multiple coils (FC15)
-      if (!Array.isArray(config.value)) {
-        throw new Error('FC15 requires value to be an array of bits (0/1)')
-      }
-      const quantity = config.value.length
-      const byteCount = Math.ceil(quantity / 8)
-      const coilBytes: number[] = new Array(byteCount).fill(0)
-      config.value.forEach((bit, i) => {
-        if (bit) {
-          coilBytes[Math.floor(i / 8)] |= 1 << (i % 8)
-        }
-      })
-      request = [
-        config.slaveId,
-        config.functionCode,
-        (config.address >> 8) & 0xff,
-        config.address & 0xff,
-        (quantity >> 8) & 0xff,
-        quantity & 0xff,
-        byteCount,
-        ...coilBytes,
-      ]
-    } else if (config.functionCode === 16) {
-      // Write multiple registers (FC16)
-      if (!Array.isArray(config.value)) {
-        throw new Error('FC16 requires value to be an array of register values')
-      }
-      const quantity = config.value.length
-      const byteCount = quantity * 2
-      const registers: number[] = []
-      for (const v of config.value) {
-        registers.push((v >> 8) & 0xff, v & 0xff)
-      }
-      request = [
-        config.slaveId,
-        config.functionCode,
-        (config.address >> 8) & 0xff,
-        config.address & 0xff,
-        (quantity >> 8) & 0xff,
-        quantity & 0xff,
-        byteCount,
-        ...registers,
-      ]
-    } else {
-      throw new Error(`Unsupported function code: ${config.functionCode}`)
-    }
-
-    if (this.protocol === 'rtu') {
-      const crcValue = calculateCRC16(request)
-      request.push(crcValue & 0xff, (crcValue >> 8) & 0xff)
-      return new Uint8Array(request)
-    } else {
-      // ASCII mode: format as :AABBCC...DDLR\r\n
-      const lrcValue = calculateLRC(request)
-      request.push(lrcValue)
-
-      // Convert to ASCII hex format
-      const hexString = request
-        .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
-        .join('')
-
-      // Create ASCII frame: : + hex data + \r\n
-      const asciiFrame = `:${hexString}\r\n`
-      return new Uint8Array(Array.from(asciiFrame).map((c) => c.charCodeAt(0)))
-    }
+    return buildWriteRequest(config, this.protocol)
   }
 }
