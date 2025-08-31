@@ -68,6 +68,13 @@ export function App() {
     return Math.max(500, Math.min(10000, timeout))
   })
 
+  // Pending values for monitoring controls (used during editing)
+  const [pendingPollingInterval, setPendingPollingInterval] =
+    useState<string>('')
+  const [pendingRequestTimeout, setPendingRequestTimeout] = useState<string>('')
+  const [showMonitoringApplyCancel, setShowMonitoringApplyCancel] =
+    useState(false)
+
   // Instances (initialized via useEffect)
   const [serialManager] = useState(() => new SerialManager())
   const [modbusClient] = useState(() => new ModbusClient())
@@ -191,6 +198,13 @@ export function App() {
 
   const handleDisconnect = async () => {
     try {
+      // Stop monitoring if currently active
+      if (isMonitoring) {
+        modbusClient.stopMonitoring()
+        setIsMonitoring(false)
+        addLog('Info', 'Stopped monitoring due to disconnection')
+      }
+
       await serialManager.disconnect()
     } catch (error) {
       addLog('Error', `Disconnection error: ${(error as Error).message}`)
@@ -283,54 +297,113 @@ export function App() {
     addLog('Info', `Protocol changed to ${newProtocol.toUpperCase()}`)
   }
 
-  const handlePollingIntervalChange = (value: number) => {
-    // Clamp to valid range
-    const clampedValue = Math.max(100, Math.min(60000, value))
-    setPollingInterval(clampedValue)
-    localStorage.setItem('modbus-polling-interval', clampedValue.toString())
+  const handlePendingPollingIntervalChange = (e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    const value = target.value
+    setPendingPollingInterval(value)
 
-    if (clampedValue !== value) {
+    // Show apply/cancel buttons when value differs from current
+    if (value !== pollingInterval.toString()) {
+      setShowMonitoringApplyCancel(true)
+    } else if (
+      pendingRequestTimeout === requestTimeout.toString() ||
+      pendingRequestTimeout === ''
+    ) {
+      setShowMonitoringApplyCancel(false)
+    }
+  }
+
+  const handlePendingRequestTimeoutChange = (e: Event) => {
+    const target = e.currentTarget as HTMLInputElement
+    const value = target.value
+    setPendingRequestTimeout(value)
+
+    // Show apply/cancel buttons when value differs from current
+    if (value !== requestTimeout.toString()) {
+      setShowMonitoringApplyCancel(true)
+    } else if (
+      pendingPollingInterval === pollingInterval.toString() ||
+      pendingPollingInterval === ''
+    ) {
+      setShowMonitoringApplyCancel(false)
+    }
+  }
+
+  const validateMonitoringValues = () => {
+    const pollingValue =
+      pendingPollingInterval === ''
+        ? pollingInterval
+        : Number.parseInt(pendingPollingInterval, 10)
+    const timeoutValue =
+      pendingRequestTimeout === ''
+        ? requestTimeout
+        : Number.parseInt(pendingRequestTimeout, 10)
+
+    return (
+      !Number.isNaN(pollingValue) &&
+      !Number.isNaN(timeoutValue) &&
+      pollingValue >= 100 &&
+      pollingValue <= 60000 &&
+      timeoutValue >= 500 &&
+      timeoutValue <= 10000
+    )
+  }
+
+  const handleApplyMonitoringChanges = () => {
+    const newPollingInterval =
+      pendingPollingInterval === ''
+        ? pollingInterval
+        : Number.parseInt(pendingPollingInterval, 10)
+    const newRequestTimeout =
+      pendingRequestTimeout === ''
+        ? requestTimeout
+        : Number.parseInt(pendingRequestTimeout, 10)
+
+    // Clamp values to valid ranges
+    const clampedPolling = Math.max(100, Math.min(60000, newPollingInterval))
+    const clampedTimeout = Math.max(500, Math.min(10000, newRequestTimeout))
+
+    // Update state and localStorage
+    setPollingInterval(clampedPolling)
+    setRequestTimeout(clampedTimeout)
+    localStorage.setItem('modbus-polling-interval', clampedPolling.toString())
+    localStorage.setItem('modbus-request-timeout', clampedTimeout.toString())
+
+    // Clear pending values and hide buttons
+    setPendingPollingInterval('')
+    setPendingRequestTimeout('')
+    setShowMonitoringApplyCancel(false)
+
+    // Show warnings if values were clamped
+    if (clampedPolling !== newPollingInterval) {
       addLog(
         'Warning',
-        `Polling interval clamped to ${clampedValue}ms (valid range: 100-60000ms)`
+        `Polling interval clamped to ${clampedPolling}ms (valid range: 100-60000ms)`
+      )
+    }
+    if (clampedTimeout !== newRequestTimeout) {
+      addLog(
+        'Warning',
+        `Request timeout clamped to ${clampedTimeout}ms (valid range: 500-10000ms)`
       )
     }
 
-    // Auto-restart monitoring if currently active
+    // Restart monitoring if currently active
     if (isMonitoring) {
       const config: ModbusReadConfig = { ...readConfig, slaveId }
       modbusClient.stopMonitoring()
-      modbusClient.startMonitoring(config, clampedValue, requestTimeout)
+      modbusClient.startMonitoring(config, clampedPolling, clampedTimeout)
       addLog(
         'Info',
-        `Monitoring updated with new polling interval: ${clampedValue}ms`
+        `Monitoring updated with new settings (interval: ${clampedPolling}ms, timeout: ${clampedTimeout}ms)`
       )
     }
   }
 
-  const handleRequestTimeoutChange = (value: number) => {
-    // Clamp to valid range
-    const clampedValue = Math.max(500, Math.min(10000, value))
-    setRequestTimeout(clampedValue)
-    localStorage.setItem('modbus-request-timeout', clampedValue.toString())
-
-    if (clampedValue !== value) {
-      addLog(
-        'Warning',
-        `Request timeout clamped to ${clampedValue}ms (valid range: 500-10000ms)`
-      )
-    }
-
-    // Auto-restart monitoring if currently active
-    if (isMonitoring) {
-      const config: ModbusReadConfig = { ...readConfig, slaveId }
-      modbusClient.stopMonitoring()
-      modbusClient.startMonitoring(config, pollingInterval, clampedValue)
-      addLog(
-        'Info',
-        `Monitoring updated with new request timeout: ${clampedValue}ms`
-      )
-    }
+  const handleCancelMonitoringChanges = () => {
+    setPendingPollingInterval('')
+    setPendingRequestTimeout('')
+    setShowMonitoringApplyCancel(false)
   }
 
   const clearLogs = () => {
@@ -741,11 +814,13 @@ export function App() {
                   id="pollingInterval"
                   max="60000"
                   min="100"
-                  onChange={(e) =>
-                    handlePollingIntervalChange(Number(e.currentTarget.value))
-                  }
+                  onChange={handlePendingPollingIntervalChange}
                   type="number"
-                  value={pollingInterval}
+                  value={
+                    pendingPollingInterval === ''
+                      ? pollingInterval
+                      : pendingPollingInterval
+                  }
                 />
               </div>
 
@@ -756,24 +831,53 @@ export function App() {
                   id="requestTimeout"
                   max="10000"
                   min="500"
-                  onChange={(e) =>
-                    handleRequestTimeoutChange(Number(e.currentTarget.value))
-                  }
+                  onChange={handlePendingRequestTimeoutChange}
                   type="number"
-                  value={requestTimeout}
+                  value={
+                    pendingRequestTimeout === ''
+                      ? requestTimeout
+                      : pendingRequestTimeout
+                  }
                 />
               </div>
 
-              <div className="form-group">
-                <button
-                  className="btn btn-secondary"
-                  disabled={!isConnected}
-                  onClick={handleMonitorToggle}
-                  type="button"
-                >
-                  {isMonitoring ? 'Stop Monitor' : 'Start Monitor'}
-                </button>
-              </div>
+              {!showMonitoringApplyCancel && (
+                <div className="form-group">
+                  <button
+                    className="btn btn-secondary"
+                    disabled={!isConnected}
+                    onClick={handleMonitorToggle}
+                    type="button"
+                  >
+                    {isMonitoring ? 'Stop Monitor' : 'Start Monitor'}
+                  </button>
+                </div>
+              )}
+
+              {showMonitoringApplyCancel && (
+                <>
+                  <div className="form-group">
+                    <button
+                      className="btn btn-success"
+                      disabled={!isConnected || !validateMonitoringValues()}
+                      onClick={handleApplyMonitoringChanges}
+                      type="button"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <div className="form-group">
+                    <button
+                      className="btn btn-secondary"
+                      disabled={!isConnected}
+                      onClick={handleCancelMonitoringChanges}
+                      type="button"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </section>
