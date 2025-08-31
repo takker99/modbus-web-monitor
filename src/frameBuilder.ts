@@ -30,74 +30,83 @@ export function buildWriteRequest(
 ): Uint8Array {
   let request: number[]
 
-  if (config.functionCode === 5) {
-    // Write single coil
-    const value = Array.isArray(config.value) ? config.value[0] : config.value
-    request = [
-      config.slaveId,
-      config.functionCode,
-      (config.address >> 8) & 0xff,
-      config.address & 0xff,
-      value ? 0xff : 0x00,
-      0x00,
-    ]
-  } else if (config.functionCode === 6) {
-    // Write single register
-    const value = Array.isArray(config.value) ? config.value[0] : config.value
-    request = [
-      config.slaveId,
-      config.functionCode,
-      (config.address >> 8) & 0xff,
-      config.address & 0xff,
-      (value >> 8) & 0xff,
-      value & 0xff,
-    ]
-  } else if (config.functionCode === 15) {
-    // Write multiple coils (FC15)
-    if (!Array.isArray(config.value)) {
-      throw new Error('FC15 requires value to be an array of bits (0/1)')
+  switch (config.functionCode) {
+    case 5: {
+      // Write single coil
+      const value = Array.isArray(config.value) ? config.value[0] : config.value
+      request = [
+        config.slaveId,
+        config.functionCode,
+        (config.address >> 8) & 0xff,
+        config.address & 0xff,
+        value ? 0xff : 0x00,
+        0x00,
+      ]
+      break
     }
-    const quantity = config.value.length
-    const byteCount = Math.ceil(quantity / 8)
-    const coilBytes: number[] = new Array(byteCount).fill(0)
-    config.value.forEach((bit, i) => {
-      if (bit) {
-        coilBytes[Math.floor(i / 8)] |= 1 << (i % 8)
+    case 6: {
+      // Write single register
+      const value = Array.isArray(config.value) ? config.value[0] : config.value
+      request = [
+        config.slaveId,
+        config.functionCode,
+        (config.address >> 8) & 0xff,
+        config.address & 0xff,
+        (value >> 8) & 0xff,
+        value & 0xff,
+      ]
+      break
+    }
+    case 15: {
+      // Write multiple coils (FC15)
+      if (!Array.isArray(config.value)) {
+        throw new Error('FC15 requires value to be an array of bits (0/1)')
       }
-    })
-    request = [
-      config.slaveId,
-      config.functionCode,
-      (config.address >> 8) & 0xff,
-      config.address & 0xff,
-      (quantity >> 8) & 0xff,
-      quantity & 0xff,
-      byteCount,
-      ...coilBytes,
-    ]
-  } else if (config.functionCode === 16) {
-    // Write multiple registers (FC16)
-    if (!Array.isArray(config.value)) {
-      throw new Error('FC16 requires value to be an array of register values')
+      const quantity = config.value.length
+      const byteCount = Math.ceil(quantity / 8)
+      const coilBytes: number[] = new Array(byteCount).fill(0)
+      config.value.forEach((bit, i) => {
+        if (bit) {
+          coilBytes[Math.floor(i / 8)] |= 1 << (i % 8)
+        }
+      })
+      request = [
+        config.slaveId,
+        config.functionCode,
+        (config.address >> 8) & 0xff,
+        config.address & 0xff,
+        (quantity >> 8) & 0xff,
+        quantity & 0xff,
+        byteCount,
+        ...coilBytes,
+      ]
+      break
     }
-    const quantity = config.value.length
-    const byteCount = quantity * 2
-    const registers: number[] = []
-    for (const v of config.value) {
-      registers.push((v >> 8) & 0xff, v & 0xff)
+    case 16: {
+      // Write multiple registers (FC16)
+      if (!Array.isArray(config.value)) {
+        throw new Error('FC16 requires value to be an array of register values')
+      }
+      const quantity = config.value.length
+      const byteCount = quantity * 2
+      const registers: number[] = []
+      for (const v of config.value) {
+        registers.push((v >> 8) & 0xff, v & 0xff)
+      }
+      request = [
+        config.slaveId,
+        config.functionCode,
+        (config.address >> 8) & 0xff,
+        config.address & 0xff,
+        (quantity >> 8) & 0xff,
+        quantity & 0xff,
+        byteCount,
+        ...registers,
+      ]
+      break
     }
-    request = [
-      config.slaveId,
-      config.functionCode,
-      (config.address >> 8) & 0xff,
-      config.address & 0xff,
-      (quantity >> 8) & 0xff,
-      quantity & 0xff,
-      byteCount,
-      ...registers,
-    ]
-  } else {
-    throw new Error(`Unsupported function code: ${config.functionCode}`)
+    default:
+      throw new Error(`Unsupported function code: ${config.functionCode}`)
   }
 
   return buildFrame(request, protocol)
@@ -109,18 +118,17 @@ function buildFrame(request: number[], protocol: ModbusProtocol): Uint8Array {
     const crcValue = calculateCRC16(request)
     request.push(crcValue & 0xff, (crcValue >> 8) & 0xff)
     return new Uint8Array(request)
-  } else {
-    // ASCII mode: format as :AABBCC...DDLR\r\n
-    const lrcValue = calculateLRC(request)
-    request.push(lrcValue)
-
-    // Convert to ASCII hex format
-    const hexString = request
-      .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
-      .join('')
-
-    // Create ASCII frame: : + hex data + \r\n
-    const asciiFrame = `:${hexString}\r\n`
-    return new Uint8Array(Array.from(asciiFrame).map((c) => c.charCodeAt(0)))
   }
+  // ASCII mode: format as :AABBCC...DDLR\r\n
+  const lrcValue = calculateLRC(request)
+  request.push(lrcValue)
+
+  // Convert to ASCII hex format
+  const hexString = request
+    .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
+    .join('')
+
+  // Create ASCII frame: : + hex data + \r\n
+  const asciiFrame = `:${hexString}\r\n`
+  return new Uint8Array(Array.from(asciiFrame).map((c) => c.charCodeAt(0)))
 }

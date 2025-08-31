@@ -2,6 +2,7 @@
 
 import { calculateCRC16 } from './crc.ts'
 import { ModbusCRCError, ModbusFrameError, ModbusLRCError } from './errors.ts'
+import { isValidFunctionCode } from './functionCodes.ts'
 import { calculateLRC } from './lrc.ts'
 
 // Result type for frame parsing operations
@@ -95,13 +96,10 @@ export function isPlausibleFrameStart(
   if (slaveId < 1 || slaveId > 247) return false
 
   // Valid function codes: 1-6, 15-16, or exception responses (0x81-0x86, 0x8F, 0x90)
-  const validFunctionCodes = [1, 2, 3, 4, 5, 6, 15, 16]
-  const isValidFunction = validFunctionCodes.includes(functionCode)
   const isException =
-    (functionCode & 0x80) !== 0 &&
-    validFunctionCodes.includes(functionCode & 0x7f)
+    (functionCode & 0x80) !== 0 && isValidFunctionCode(functionCode & 0x7f)
 
-  return isValidFunction || isException
+  return isValidFunctionCode(functionCode) || isException
 }
 
 // Find the next plausible frame start position in buffer for resynchronization

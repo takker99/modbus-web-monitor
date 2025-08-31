@@ -11,7 +11,7 @@ import {
   parseBitResponse,
   parseRegisterResponse,
 } from './frameParser.ts'
-import { FUNCTION_CODE_LABELS } from './functionCodes.ts'
+import { FUNCTION_CODE_LABELS, isValidFunctionCode } from './functionCodes.ts'
 import { calculateLRC } from './lrc.ts'
 import { EventEmitter } from './serial.ts'
 import type {
@@ -348,8 +348,10 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     const modbusResponse: ModbusResponse = {
       data,
       functionCode,
-      functionCodeLabel:
-        FUNCTION_CODE_LABELS[functionCode] || `Unknown (${functionCode})`,
+      functionCodeLabel: isValidFunctionCode(functionCode)
+        ? FUNCTION_CODE_LABELS[functionCode]
+        : `Unknown (${functionCode})`,
+
       slaveId,
       timestamp: new Date(),
     }
@@ -380,8 +382,9 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     const modbusResponse: ModbusResponse = {
       data,
       functionCode,
-      functionCodeLabel:
-        FUNCTION_CODE_LABELS[functionCode] || `Unknown (${functionCode})`,
+      functionCodeLabel: isValidFunctionCode(functionCode)
+        ? FUNCTION_CODE_LABELS[functionCode]
+        : `Unknown (${functionCode})`,
       slaveId,
       timestamp: new Date(),
     }
