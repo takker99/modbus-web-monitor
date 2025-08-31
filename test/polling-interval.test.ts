@@ -4,15 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const localStorageMock = (() => {
   let store: Record<string, string> = {}
   return {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => {
-      store[key] = value
-    },
     clear: () => {
       store = {}
     },
+    getItem: (key: string) => store[key] || null,
     removeItem: (key: string) => {
       delete store[key]
+    },
+    setItem: (key: string, value: string) => {
+      store[key] = value
     },
   }
 })()
@@ -32,21 +32,21 @@ describe('Polling Interval Feature', () => {
     it('should use default 1000ms when no localStorage value exists', () => {
       const savedValue = localStorage.getItem('modbus-polling-interval')
       expect(savedValue).toBeNull()
-      
+
       // Simulate the useState initialization logic
       const interval = savedValue ? Number.parseInt(savedValue, 10) : 1000
       const clampedInterval = Math.max(100, Math.min(60000, interval))
-      
+
       expect(clampedInterval).toBe(1000)
     })
 
     it('should load saved interval from localStorage', () => {
       localStorage.setItem('modbus-polling-interval', '2500')
-      
+
       const savedValue = localStorage.getItem('modbus-polling-interval')
       const interval = savedValue ? Number.parseInt(savedValue, 10) : 1000
       const clampedInterval = Math.max(100, Math.min(60000, interval))
-      
+
       expect(clampedInterval).toBe(2500)
     })
 
@@ -99,9 +99,9 @@ describe('Polling Interval Feature', () => {
     it('should have correct HTML attributes for validation', () => {
       // Test that the input field has the correct min/max attributes
       const expectedAttributes = {
-        min: '100',
         max: '60000',
-        type: 'number'
+        min: '100',
+        type: 'number',
       }
 
       expect(expectedAttributes.min).toBe('100')
