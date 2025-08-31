@@ -52,6 +52,14 @@ export function App() {
     value: '',
   })
 
+  // Polling interval state (with localStorage persistence)
+  const [pollingInterval, setPollingInterval] = useState(() => {
+    const saved = localStorage.getItem('modbus-polling-interval')
+    const interval = saved ? Number.parseInt(saved, 10) : 1000
+    // Clamp to valid range
+    return Math.max(100, Math.min(60000, interval))
+  })
+
   // Instances (initialized via useEffect)
   const [serialManager] = useState(() => new SerialManager())
   const [modbusClient] = useState(() => new ModbusClient())
@@ -252,9 +260,9 @@ export function App() {
       addLog('Info', 'Stopped monitoring')
     } else {
       const config: ModbusReadConfig = { ...readConfig, slaveId }
-      modbusClient.startMonitoring(config, 1000)
+      modbusClient.startMonitoring(config, pollingInterval)
       setIsMonitoring(true)
-      addLog('Info', 'Started monitoring')
+      addLog('Info', `Started monitoring (interval: ${pollingInterval}ms)`)
     }
   }
 
@@ -262,6 +270,20 @@ export function App() {
     setProtocol(newProtocol)
     modbusClient.setProtocol(newProtocol)
     addLog('Info', `Protocol changed to ${newProtocol.toUpperCase()}`)
+  }
+
+  const handlePollingIntervalChange = (value: number) => {
+    // Clamp to valid range
+    const clampedValue = Math.max(100, Math.min(60000, value))
+    setPollingInterval(clampedValue)
+    localStorage.setItem('modbus-polling-interval', clampedValue.toString())
+
+    if (clampedValue !== value) {
+      addLog(
+        'Warning',
+        `Polling interval clamped to ${clampedValue}ms (valid range: 100-60000ms)`
+      )
+    }
   }
 
   const clearLogs = () => {
@@ -644,6 +666,21 @@ export function App() {
                 }
                 type="number"
                 value={readConfig.quantity}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="pollingInterval">Polling Interval (ms):</label>
+              <input
+                disabled={!isConnected}
+                id="pollingInterval"
+                max="60000"
+                min="100"
+                onChange={(e) =>
+                  handlePollingIntervalChange(Number(e.currentTarget.value))
+                }
+                type="number"
+                value={pollingInterval}
               />
             </div>
 
