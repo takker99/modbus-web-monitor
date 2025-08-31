@@ -12,6 +12,7 @@ export default defineConfig({
     sourcemap: true,
   },
   plugins: [preact()],
+  publicDir: 'public', // Ensure public assets are copied to dist
   resolve: {
     alias: {
       '@': '/src',

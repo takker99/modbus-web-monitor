@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="230" fill="#2c3e50" stroke="#34495e" stroke-width="20"/>
+  
+  <!-- Modbus device representation -->
+  <rect x="156" y="180" width="200" height="120" rx="10" fill="#ecf0f1" stroke="#95a5a6" stroke-width="3"/>
+  
+  <!-- Serial connection lines -->
+  <line x1="100" y1="240" x2="156" y2="240" stroke="#e74c3c" stroke-width="8" stroke-linecap="round"/>
+  <line x1="356" y1="240" x2="412" y2="240" stroke="#27ae60" stroke-width="8" stroke-linecap="round"/>
+  
+  <!-- Data indicators -->
+  <circle cx="186" cy="210" r="8" fill="#3498db"/>
+  <circle cx="216" cy="210" r="8" fill="#3498db"/>
+  <circle cx="246" cy="210" r="8" fill="#3498db"/>
+  
+  <!-- Communication symbol -->
+  <path d="M280 220 L320 200 L320 240 Z" fill="#e67e22"/>
+  <path d="M320 220 L280 200 L280 240 Z" fill="#f39c12"/>
+  
+  <!-- Monitor text indicator -->
+  <text x="256" y="275" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#2c3e50">MB</text>
+  
+  <!-- Web indicator -->
+  <circle cx="256" cy="350" r="40" fill="none" stroke="#9b59b6" stroke-width="4"/>
+  <circle cx="256" cy="350" r="25" fill="none" stroke="#9b59b6" stroke-width="3"/>
+  <circle cx="256" cy="350" r="10" fill="#9b59b6"/>
+</svg>
