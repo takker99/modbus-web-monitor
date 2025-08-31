@@ -6,14 +6,14 @@ describe('Frame Builder', () => {
   describe('buildReadRequest', () => {
     it('builds RTU read request correctly', () => {
       const config: ModbusReadConfig = {
-        slaveId: 1,
         functionCode: 3,
-        startAddress: 0x0000,
         quantity: 10,
+        slaveId: 1,
+        startAddress: 0x0000,
       }
-      
+
       const frame = buildReadRequest(config, 'rtu')
-      
+
       // Expected: [0x01, 0x03, 0x00, 0x00, 0x00, 0x0A, CRC_LO, CRC_HI]
       expect(frame.length).toBe(8)
       expect(frame[0]).toBe(1) // slave ID
@@ -27,15 +27,15 @@ describe('Frame Builder', () => {
 
     it('builds ASCII read request correctly', () => {
       const config: ModbusReadConfig = {
-        slaveId: 1,
         functionCode: 3,
-        startAddress: 0x0000,
         quantity: 10,
+        slaveId: 1,
+        startAddress: 0x0000,
       }
-      
+
       const frame = buildReadRequest(config, 'ascii')
       const frameString = String.fromCharCode(...frame)
-      
+
       expect(frameString.startsWith(':')).toBe(true)
       expect(frameString.endsWith('\r\n')).toBe(true)
       expect(frameString).toContain('01030000000A') // hex data
@@ -45,33 +45,33 @@ describe('Frame Builder', () => {
   describe('buildWriteRequest', () => {
     it('builds single coil write request (FC05)', () => {
       const config: ModbusWriteConfig = {
-        slaveId: 1,
-        functionCode: 5,
         address: 0x0013,
+        functionCode: 5,
+        slaveId: 1,
         value: 1,
       }
-      
+
       const frame = buildWriteRequest(config, 'rtu')
-      
+
       expect(frame.length).toBe(8)
       expect(frame[0]).toBe(1) // slave ID
       expect(frame[1]).toBe(5) // function code
       expect(frame[2]).toBe(0) // address high
       expect(frame[3]).toBe(0x13) // address low
-      expect(frame[4]).toBe(0xFF) // value high (ON = 0xFF00)
+      expect(frame[4]).toBe(0xff) // value high (ON = 0xFF00)
       expect(frame[5]).toBe(0x00) // value low
     })
 
     it('builds single register write request (FC06)', () => {
       const config: ModbusWriteConfig = {
-        slaveId: 1,
-        functionCode: 6,
         address: 0x0001,
+        functionCode: 6,
+        slaveId: 1,
         value: 0x1234,
       }
-      
+
       const frame = buildWriteRequest(config, 'rtu')
-      
+
       expect(frame.length).toBe(8)
       expect(frame[0]).toBe(1) // slave ID
       expect(frame[1]).toBe(6) // function code
@@ -83,14 +83,14 @@ describe('Frame Builder', () => {
 
     it('builds multiple coils write request (FC15)', () => {
       const config: ModbusWriteConfig = {
-        slaveId: 1,
-        functionCode: 15,
         address: 0x0013,
+        functionCode: 15,
+        slaveId: 1,
         value: [1, 0, 1, 1, 0, 1, 0, 0, 1], // 9 bits = 2 bytes
       }
-      
+
       const frame = buildWriteRequest(config, 'rtu')
-      
+
       expect(frame.length).toBe(11) // slave + fc + addr(2) + qty(2) + byteCount + data(2) + crc(2)
       expect(frame[0]).toBe(1) // slave ID
       expect(frame[1]).toBe(15) // function code
@@ -106,14 +106,14 @@ describe('Frame Builder', () => {
 
     it('builds multiple registers write request (FC16)', () => {
       const config: ModbusWriteConfig = {
-        slaveId: 1,
-        functionCode: 16,
         address: 0x0001,
+        functionCode: 16,
+        slaveId: 1,
         value: [0x1234, 0x5678],
       }
-      
+
       const frame = buildWriteRequest(config, 'rtu')
-      
+
       expect(frame.length).toBe(13) // slave + fc + addr(2) + qty(2) + byteCount + data(4) + crc(2)
       expect(frame[0]).toBe(1) // slave ID
       expect(frame[1]).toBe(16) // function code
@@ -130,13 +130,16 @@ describe('Frame Builder', () => {
 
     it('throws error for unsupported function code', () => {
       const config = {
-        slaveId: 1,
-        functionCode: 99 as any,
         address: 0,
+        // biome-ignore lint/suspicious/noExplicitAny: For test case
+        functionCode: 99 as any,
+        slaveId: 1,
         value: 0,
       }
-      
-      expect(() => buildWriteRequest(config, 'rtu')).toThrow('Unsupported function code: 99')
+
+      expect(() => buildWriteRequest(config, 'rtu')).toThrow(
+        'Unsupported function code: 99'
+      )
     })
   })
 })

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   FUNCTION_CODE_LABELS,
-  VALID_FUNCTION_CODES,
   isBitBasedFunctionCode,
   isReadFunctionCode,
   isRegisterBasedFunctionCode,
   isValidFunctionCode,
   isWriteFunctionCode,
+  VALID_FUNCTION_CODES,
 } from '../src/functionCodes.ts'
 
 describe('Function Code Utilities', () => {
