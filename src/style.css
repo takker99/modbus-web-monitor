@@ -249,6 +249,20 @@ body {
   gap: 10px;
 }
 
+/* モニタリングコントロール */
+.monitoring-controls {
+  padding-top: 15px;
+  margin-top: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.monitoring-controls h3 {
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
 /* データ表示パネル */
 .data-controls {
   display: flex;

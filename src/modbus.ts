@@ -131,7 +131,10 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     this.protocol = protocol
   }
 
-  async read(config: ModbusReadConfig): Promise<ModbusResponse> {
+  async read(
+    config: ModbusReadConfig,
+    timeout = 3000
+  ): Promise<ModbusResponse> {
     return new Promise((resolve, reject) => {
       if (this.pendingRequest) {
         reject(new Error('Another request is in progress'))
@@ -147,7 +150,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         timeout: setTimeout(() => {
           this.pendingRequest = null
           reject(new Error('Request timed out'))
-        }, 3000),
+        }, timeout),
       }
 
       this.emit('request', request)
@@ -166,7 +169,7 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     })
   }
 
-  async write(config: ModbusWriteConfig): Promise<void> {
+  async write(config: ModbusWriteConfig, timeout = 3000): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.pendingRequest) {
         reject(new Error('Another request is in progress'))
@@ -182,19 +185,19 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
         timeout: setTimeout(() => {
           this.pendingRequest = null
           reject(new Error('Request timed out'))
-        }, 3000),
+        }, timeout),
       }
 
       this.emit('request', request)
     })
   }
 
-  startMonitoring(config: ModbusReadConfig, interval = 1000) {
+  startMonitoring(config: ModbusReadConfig, interval = 1000, timeout = 3000) {
     this.stopMonitoring()
 
     this.monitoringInterval = setInterval(async () => {
       try {
-        const response = await this.read(config)
+        const response = await this.read(config, timeout)
         this.emit('response', response)
       } catch (error) {
         this.emit('error', error as Error)
