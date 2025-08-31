@@ -3,7 +3,7 @@ import { ModbusClient } from '../src/modbus.ts'
 
 describe('UI Monitoring Controls Integration', () => {
   let modbusClient: ModbusClient
-  
+
   beforeEach(() => {
     modbusClient = new ModbusClient()
     vi.useFakeTimers()
@@ -11,15 +11,15 @@ describe('UI Monitoring Controls Integration', () => {
 
   it('should handle automatic monitoring restart when polling interval changes', () => {
     const config = {
-      slaveId: 1,
       functionCode: 3 as const,
-      startAddress: 0,
       quantity: 10,
+      slaveId: 1,
+      startAddress: 0,
     }
 
     // Start monitoring
     modbusClient.startMonitoring(config, 1000, 3000)
-    
+
     // Simulate changing polling interval (auto-restart behavior)
     modbusClient.stopMonitoring()
     modbusClient.startMonitoring(config, 500, 3000) // New polling interval
@@ -31,10 +31,10 @@ describe('UI Monitoring Controls Integration', () => {
 
   it('should handle automatic monitoring restart when request timeout changes', () => {
     const config = {
-      slaveId: 1,
       functionCode: 3 as const,
-      startAddress: 0,
       quantity: 10,
+      slaveId: 1,
+      startAddress: 0,
     }
 
     // Start monitoring
@@ -51,10 +51,10 @@ describe('UI Monitoring Controls Integration', () => {
 
   it('should maintain monitoring state through parameter changes', () => {
     const config = {
-      slaveId: 1,
       functionCode: 3 as const,
-      startAddress: 0,
       quantity: 10,
+      slaveId: 1,
+      startAddress: 0,
     }
 
     // Start monitoring
