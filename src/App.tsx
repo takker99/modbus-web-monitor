@@ -60,6 +60,14 @@ export function App() {
     return Math.max(100, Math.min(60000, interval))
   })
 
+  // Request timeout state (with localStorage persistence)
+  const [requestTimeout, setRequestTimeout] = useState(() => {
+    const saved = localStorage.getItem('modbus-request-timeout')
+    const timeout = saved ? Number.parseInt(saved, 10) : 3000
+    // Clamp to valid range
+    return Math.max(500, Math.min(10000, timeout))
+  })
+
   // Instances (initialized via useEffect)
   const [serialManager] = useState(() => new SerialManager())
   const [modbusClient] = useState(() => new ModbusClient())
@@ -203,7 +211,7 @@ export function App() {
   const handleRead = async () => {
     try {
       const config: ModbusReadConfig = { ...readConfig, slaveId }
-      await modbusClient.read(config)
+      await modbusClient.read(config, requestTimeout)
     } catch (error) {
       addLog('Error', `Read error: ${(error as Error).message}`)
     }
@@ -247,7 +255,7 @@ export function App() {
         value,
       }
 
-      await modbusClient.write(config)
+      await modbusClient.write(config, requestTimeout)
     } catch (error) {
       addLog('Error', `Write error: ${(error as Error).message}`)
     }
@@ -260,9 +268,12 @@ export function App() {
       addLog('Info', 'Stopped monitoring')
     } else {
       const config: ModbusReadConfig = { ...readConfig, slaveId }
-      modbusClient.startMonitoring(config, pollingInterval)
+      modbusClient.startMonitoring(config, pollingInterval, requestTimeout)
       setIsMonitoring(true)
-      addLog('Info', `Started monitoring (interval: ${pollingInterval}ms)`)
+      addLog(
+        'Info',
+        `Started monitoring (interval: ${pollingInterval}ms, timeout: ${requestTimeout}ms)`
+      )
     }
   }
 
@@ -282,6 +293,20 @@ export function App() {
       addLog(
         'Warning',
         `Polling interval clamped to ${clampedValue}ms (valid range: 100-60000ms)`
+      )
+    }
+  }
+
+  const handleRequestTimeoutChange = (value: number) => {
+    // Clamp to valid range
+    const clampedValue = Math.max(500, Math.min(10000, value))
+    setRequestTimeout(clampedValue)
+    localStorage.setItem('modbus-request-timeout', clampedValue.toString())
+
+    if (clampedValue !== value) {
+      addLog(
+        'Warning',
+        `Request timeout clamped to ${clampedValue}ms (valid range: 500-10000ms)`
       )
     }
   }
@@ -681,6 +706,21 @@ export function App() {
                 }
                 type="number"
                 value={pollingInterval}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="requestTimeout">Request Timeout (ms):</label>
+              <input
+                disabled={!isConnected}
+                id="requestTimeout"
+                max="10000"
+                min="500"
+                onChange={(e) =>
+                  handleRequestTimeoutChange(Number(e.currentTarget.value))
+                }
+                type="number"
+                value={requestTimeout}
               />
             </div>
 
