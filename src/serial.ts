@@ -185,7 +185,7 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
           // Stream ended - this typically means the port was closed
           if (this.isConnected) {
             console.log("SerialManager: Read stream ended unexpectedly");
-            this.handleUnexpectedDisconnect("Port read stream ended");
+            await this.handleUnexpectedDisconnect("Port read stream ended");
           }
           break;
         }
@@ -200,14 +200,14 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
 
         // Check if this looks like a disconnect error
         const errorMessage = (error as Error).message.toLowerCase();
-        if (
+  if (
           errorMessage.includes("device") ||
           errorMessage.includes("port") ||
           errorMessage.includes("connection") ||
           errorMessage.includes("network") ||
           errorMessage.includes("disconnected")
         ) {
-          this.handleUnexpectedDisconnect((error as Error).message);
+    await this.handleUnexpectedDisconnect((error as Error).message);
         } else {
           this.emit(
             "error",
@@ -218,7 +218,7 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
     }
   }
 
-  private handleUnexpectedDisconnect(reason: string): void {
+  private async handleUnexpectedDisconnect(reason: string): Promise<void> {
     console.log("SerialManager: Handling unexpected disconnect:", reason);
 
     // Clean up resources without emitting 'disconnected' event
@@ -240,7 +240,7 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
     // Clean up writer
     if (this.writer) {
       try {
-        this.writer.close();
+        await this.writer.close();
       } catch (error) {
         console.log(
           "SerialManager: Error closing writer during unexpected disconnect",

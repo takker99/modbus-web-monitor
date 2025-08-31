@@ -170,7 +170,8 @@ export function parseRTUFrame(buffer: number[]): ParseResult<ParsedFrame> {
   }
 
   // Validate CRC
-  if (checkFrameCRC(buffer, expectedLength)) {
+  // checkFrameCRC returns true when CRC matches, so invert for error condition
+  if (!checkFrameCRC(buffer, expectedLength)) {
     return { error: new ModbusCRCError(), success: false };
   }
 
@@ -286,8 +287,17 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
     exceptionCode = messageBytes[2];
     data = [];
   } else {
-    // Extract data based on function code
-    data = messageBytes.slice(2);
+    // Align extraction semantics with parseRTUFrame: omit byteCount for FC 1-4
+    if (
+      messageBytes.length >= 3 &&
+      (functionCode & 0x7f) >= 1 &&
+      (functionCode & 0x7f) <= 4
+    ) {
+      const byteCount = messageBytes[2];
+      data = messageBytes.slice(3, 3 + byteCount);
+    } else {
+      data = messageBytes.slice(2);
+    }
   }
 
   return {

@@ -10,10 +10,11 @@
   },
   "chat.tools.terminal.autoApprove": {
     "cd": true,
-    "npm run check": true,
-    "npm run fix": true,
+    "pnpm run check": true,
+    "pnpm run fix": true,
     "pnpm check": true,
     "pnpm fix": true,
+    "pnpm vitest": true,
     "pnpm test": true
   },
   "editor.codeActionsOnSave": {
