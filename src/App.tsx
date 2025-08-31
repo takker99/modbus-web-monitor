@@ -295,6 +295,17 @@ export function App() {
         `Polling interval clamped to ${clampedValue}ms (valid range: 100-60000ms)`
       )
     }
+
+    // Auto-restart monitoring if currently active
+    if (isMonitoring) {
+      const config: ModbusReadConfig = { ...readConfig, slaveId }
+      modbusClient.stopMonitoring()
+      modbusClient.startMonitoring(config, clampedValue, requestTimeout)
+      addLog(
+        'Info',
+        `Monitoring updated with new polling interval: ${clampedValue}ms`
+      )
+    }
   }
 
   const handleRequestTimeoutChange = (value: number) => {
@@ -307,6 +318,17 @@ export function App() {
       addLog(
         'Warning',
         `Request timeout clamped to ${clampedValue}ms (valid range: 500-10000ms)`
+      )
+    }
+
+    // Auto-restart monitoring if currently active
+    if (isMonitoring) {
+      const config: ModbusReadConfig = { ...readConfig, slaveId }
+      modbusClient.stopMonitoring()
+      modbusClient.startMonitoring(config, pollingInterval, clampedValue)
+      addLog(
+        'Info',
+        `Monitoring updated with new request timeout: ${clampedValue}ms`
       )
     }
   }
@@ -642,6 +664,8 @@ export function App() {
         {/* Read Settings Panel */}
         <section className="panel read-panel">
           <h2>Read Data</h2>
+
+          {/* Basic Read Parameters */}
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="readFunctionCode">Function Code:</label>
@@ -695,36 +719,6 @@ export function App() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="pollingInterval">Polling Interval (ms):</label>
-              <input
-                disabled={!isConnected}
-                id="pollingInterval"
-                max="60000"
-                min="100"
-                onChange={(e) =>
-                  handlePollingIntervalChange(Number(e.currentTarget.value))
-                }
-                type="number"
-                value={pollingInterval}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="requestTimeout">Request Timeout (ms):</label>
-              <input
-                disabled={!isConnected}
-                id="requestTimeout"
-                max="10000"
-                min="500"
-                onChange={(e) =>
-                  handleRequestTimeoutChange(Number(e.currentTarget.value))
-                }
-                type="number"
-                value={requestTimeout}
-              />
-            </div>
-
-            <div className="form-group">
               <button
                 className="btn btn-primary"
                 disabled={!isConnected || isMonitoring}
@@ -733,14 +727,53 @@ export function App() {
               >
                 Read Once
               </button>
-              <button
-                className="btn btn-secondary"
-                disabled={!isConnected}
-                onClick={handleMonitorToggle}
-                type="button"
-              >
-                {isMonitoring ? 'Stop Monitor' : 'Start Monitor'}
-              </button>
+            </div>
+          </div>
+
+          {/* Monitoring Controls */}
+          <div className="monitoring-controls">
+            <h3>Monitoring Controls</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="pollingInterval">Polling Interval (ms):</label>
+                <input
+                  disabled={!isConnected}
+                  id="pollingInterval"
+                  max="60000"
+                  min="100"
+                  onChange={(e) =>
+                    handlePollingIntervalChange(Number(e.currentTarget.value))
+                  }
+                  type="number"
+                  value={pollingInterval}
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="requestTimeout">Request Timeout (ms):</label>
+                <input
+                  disabled={!isConnected}
+                  id="requestTimeout"
+                  max="10000"
+                  min="500"
+                  onChange={(e) =>
+                    handleRequestTimeoutChange(Number(e.currentTarget.value))
+                  }
+                  type="number"
+                  value={requestTimeout}
+                />
+              </div>
+
+              <div className="form-group">
+                <button
+                  className="btn btn-secondary"
+                  disabled={!isConnected}
+                  onClick={handleMonitorToggle}
+                  type="button"
+                >
+                  {isMonitoring ? 'Stop Monitor' : 'Start Monitor'}
+                </button>
+              </div>
             </div>
           </div>
         </section>
