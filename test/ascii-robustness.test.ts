@@ -5,7 +5,7 @@ import { ModbusClient } from "../src/modbus.ts";
 describe("ASCII Frame Robustness", () => {
   it("handles frame start without ending after timeout", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol = "ascii";
 
     const promise = client.read({
       functionCode: 3,
@@ -26,7 +26,7 @@ describe("ASCII Frame Robustness", () => {
 
   it("handles ASCII buffer overflow protection", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol = "ascii";
 
     // Send large amount of noise without frame start/end
     const largeNoise = "A".repeat(10000);
@@ -53,7 +53,7 @@ describe("ASCII Frame Robustness", () => {
 
   it("handles corrupted frame followed by valid frame", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol = "ascii";
 
     const promise1 = client.read({
       functionCode: 3,
@@ -90,7 +90,7 @@ describe("ASCII Frame Robustness", () => {
 
   it("handles invalid frame format without colon", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol = "ascii";
 
     const promise = client.read({
       functionCode: 3,
@@ -111,7 +111,7 @@ describe("ASCII Frame Robustness", () => {
 
   it("handles binary data in ASCII mode", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol = "ascii";
 
     const promise = client.read({
       functionCode: 3,

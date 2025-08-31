@@ -129,8 +129,7 @@ describe("Frame Fuzzing Tests", () => {
             client.on("error", (error) => errorSpy.push(error));
 
             // Set up a pending request to trigger frame processing
-            const _promise = client
-              .read({
+            client.read({
                 // @ts-expect-error For test case
                 functionCode: functionCode as 3 | 6,
                 quantity: 1,
@@ -254,8 +253,7 @@ describe("Frame Fuzzing Tests", () => {
             client.on("error", (error) => errorSpy.push(error));
 
             // Set up pending request
-            const _promise = client
-              .read({
+            client.read({
                 //@ts-expect-error For test case
                 functionCode: functionCode as 3 | 6,
                 quantity: 1,
@@ -319,8 +317,7 @@ describe("Frame Fuzzing Tests", () => {
             frame.push(crc & 0xff, (crc >> 8) & 0xff);
 
             // Start request
-            const _promise = client
-              .read({
+            client.read({
                 functionCode: 3,
                 quantity: 1,
                 slaveId: 1,

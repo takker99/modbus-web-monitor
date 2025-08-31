@@ -6,7 +6,7 @@ import { ModbusClient } from "../src/modbus.ts";
 describe("ASCII Edge Cases Analysis", () => {
   it("handles invalid hex characters", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol="ascii";
 
     const errorSpy: Error[] = [];
     client.on("error", (error) => errorSpy.push(error));
@@ -29,7 +29,7 @@ describe("ASCII Edge Cases Analysis", () => {
 
   it("handles noise before frame start", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol = "ascii";
 
     const promise = client.read({
       functionCode: 3,
@@ -50,7 +50,7 @@ describe("ASCII Edge Cases Analysis", () => {
 
   it("handles frame without proper ending", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol = "ascii";
 
     const promise = client.read({
       functionCode: 3,
@@ -71,7 +71,7 @@ describe("ASCII Edge Cases Analysis", () => {
 
   it("handles odd number of hex characters", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol = "ascii";
 
     const promise = client.read({
       functionCode: 3,
@@ -91,7 +91,7 @@ describe("ASCII Edge Cases Analysis", () => {
 
   it("handles frame too short", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol = "ascii";
 
     const promise = client.read({
       functionCode: 3,
@@ -118,7 +118,7 @@ describe("ASCII Edge Cases Analysis", () => {
 
   it("handles frames with only noise", async () => {
     const client = new ModbusClient();
-    client.setProtocol("ascii");
+    client.protocol = "ascii";
 
     const promise = client.read({
       functionCode: 3,

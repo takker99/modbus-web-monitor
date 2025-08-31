@@ -20,7 +20,6 @@ describe("LRC Calculation", () => {
 
   it("handles sum overflow correctly", () => {
     const data = [0xff, 0xff, 0xff]; // sum = 765
-    const _expectedLRC = (256 - (765 % 256)) % 256; // = (256 - 253) % 256 = 3
     expect(calculateLRC(data)).toBe(3);
   });
 

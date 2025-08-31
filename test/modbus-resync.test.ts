@@ -289,7 +289,7 @@ describe("Buffer Resynchronization", () => {
 
     it("handles ASCII protocol without resync", async () => {
       const client = new ModbusClient();
-      client.setProtocol("ascii");
+    client.protocol = "ascii";
 
       const promise = client.read({
         functionCode: 3,

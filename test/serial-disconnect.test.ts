@@ -14,7 +14,7 @@ class MockSerialPort {
     this.mockReader = new MockReader(this.readerController);
     return {
       getReader: () => this.mockReader,
-    } as ReadableStream<Uint8Array>;
+    } as unknown as ReadableStream<Uint8Array>;
   }
 
   get writable() {
@@ -22,7 +22,7 @@ class MockSerialPort {
     this.mockWriter = new MockWriter(this.writerController);
     return {
       getWriter: () => this.mockWriter,
-    } as WritableStream<Uint8Array>;
+    } as unknown as WritableStream<Uint8Array>;
   }
 
   async open(_config: SerialOptions) {
@@ -137,7 +137,7 @@ describe("SerialManager Disconnect Handling", () => {
 
     serialManager = new SerialManager();
     mockPort = new MockSerialPort();
-    mockNavigator.serial.requestPort.mockResolvedValue(mockPort as SerialPort);
+    mockNavigator.serial.requestPort.mockResolvedValue(mockPort as unknown as SerialPort);
   });
 
   afterEach(() => {

@@ -710,7 +710,6 @@ describe("Modbus ASCII", () => {
       });
 
       // Send frame in chunks
-      const _responseFrame = ":010302000AF0\r\n";
       client.handleResponse(
         new Uint8Array(Array.from(":01030").map((c) => c.charCodeAt(0))),
       );
@@ -900,8 +899,6 @@ describe("Utility Functions", () => {
 
 describe("Function Code Type Safety", () => {
   it("allows valid read function codes", () => {
-    const _client = new ModbusClient();
-
     // All these should compile without TypeScript errors
     const validReadConfigs = [
       { functionCode: 1 as const, quantity: 1, slaveId: 1, startAddress: 0 },
@@ -915,8 +912,6 @@ describe("Function Code Type Safety", () => {
   });
 
   it("allows valid write function codes", () => {
-    const _client = new ModbusClient();
-
     // All these should compile without TypeScript errors
     const validWriteConfigs = [
       { address: 0, functionCode: 5 as const, slaveId: 1, value: 1 },

@@ -4,7 +4,11 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "jsxImportSource": "preact",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
@@ -17,6 +21,13 @@
     "target": "ES2022",
     "useUnknownInCatchVariables": true
   },
-  "exclude": ["node_modules", "dist"],
-  "include": ["src/**/*", "*.ts"]
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "*.ts"
+  ]
 }
