@@ -1,242 +1,251 @@
-import { useCallback, useEffect, useState } from 'preact/hooks'
-import { ModbusClient } from './modbus.ts'
-import { SerialManager } from './serial.ts'
+import { useCallback, useEffect, useState } from "preact/hooks";
+import type { ModbusProtocol } from "./frameBuilder.ts";
+import type { WriteFunctionCode } from "./functionCodes.ts";
+import { isReadFunctionCode, isWriteFunctionCode } from "./functionCodes.ts";
 import type {
   ModbusReadConfig,
   ModbusResponse,
   ModbusWriteConfig,
-  ModbusWriteUIConfig,
-  SerialConfig,
-  WriteFunctionCode,
-} from './types.ts'
-import { isReadFunctionCode, isWriteFunctionCode } from './types.ts'
+} from "./modbus.ts";
+import { ModbusClient } from "./modbus.ts";
+import type { SerialConfig } from "./serial.ts";
+import { SerialManager } from "./serial.ts";
+
+// Extended interface for the UI state (includes additional fields for multi-value input)
+interface ModbusWriteUIConfig {
+  address: number;
+  functionCode: WriteFunctionCode;
+  multiValues: string; // For multi-write input (comma-separated or multi-line)
+  quantity: number; // For multi-writes (FC15/16)
+  value: string; // For single-value input
+}
 
 export function App() {
   // State management
   const [connectionStatus, setConnectionStatus] = useState<
-    'Disconnected' | 'Connected'
-  >('Disconnected')
-  const [portSelected, setPortSelected] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const [portDisconnected, setPortDisconnected] = useState(false) // Track unexpected disconnection
-  const [isMonitoring, setIsMonitoring] = useState(false)
+    "Disconnected" | "Connected"
+  >("Disconnected");
+  const [portSelected, setPortSelected] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [portDisconnected, setPortDisconnected] = useState(false); // Track unexpected disconnection
+  const [isMonitoring, setIsMonitoring] = useState(false);
   const [logs, setLogs] = useState<
     Array<{ timestamp: string; type: string; message: string }>
-  >([])
-  const [data, setData] = useState<ModbusResponse[]>([])
-  const [hexDisplay, setHexDisplay] = useState(false)
+  >([]);
+  const [data, setData] = useState<ModbusResponse[]>([]);
+  const [hexDisplay, setHexDisplay] = useState(false);
 
   // Serial configuration state
   const [serialConfig, setSerialConfig] = useState<SerialConfig>({
     baudRate: 38400,
     dataBits: 8,
-    parity: 'none',
+    parity: "none",
     stopBits: 1,
-  })
+  });
 
   // Modbus configuration state
-  const [slaveId, setSlaveId] = useState(1)
-  const [protocol, setProtocol] = useState<'rtu' | 'ascii'>('rtu')
+  const [slaveId, setSlaveId] = useState(1);
+  const [protocol, setProtocol] = useState<ModbusProtocol>("rtu");
   const [readConfig, setReadConfig] = useState<
-    Omit<ModbusReadConfig, 'slaveId'>
+    Omit<ModbusReadConfig, "slaveId">
   >({
     functionCode: 3,
     quantity: 10,
     startAddress: 0,
-  })
+  });
   const [writeConfig, setWriteConfig] = useState<ModbusWriteUIConfig>({
     address: 0,
     functionCode: 6 as WriteFunctionCode,
-    multiValues: '', // For multi-write input (comma-separated or multi-line)
+    multiValues: "", // For multi-write input (comma-separated or multi-line)
     quantity: 1, // For multi-writes (FC15/16)
-    value: '',
-  })
+    value: "",
+  });
 
   // Polling interval state (with localStorage persistence)
   const [pollingInterval, setPollingInterval] = useState(() => {
-    const saved = localStorage.getItem('modbus-polling-interval')
-    const interval = saved ? Number.parseInt(saved, 10) : 1000
+    const saved = localStorage.getItem("modbus-polling-interval");
+    const interval = saved ? Number.parseInt(saved, 10) : 1000;
     // Clamp to valid range
-    return Math.max(100, Math.min(60000, interval))
-  })
+    return Math.max(100, Math.min(60000, interval));
+  });
 
   // Instances (initialized via useEffect)
-  const [serialManager] = useState(() => new SerialManager())
-  const [modbusClient] = useState(() => new ModbusClient())
+  const [serialManager] = useState(() => new SerialManager());
+  const [modbusClient] = useState(() => new ModbusClient());
 
   useEffect(() => {
     // Web Serial API support check
-    if (!('serial' in navigator)) {
+    if (!("serial" in navigator)) {
       addLog(
-        'Error',
-        'This browser does not support the Web Serial API. Please use Chrome 89+.'
-      )
-      return
+        "Error",
+        "This browser does not support the Web Serial API. Please use Chrome 89+.",
+      );
+      return;
     }
 
     // Event listeners setup
     const setupEventListeners = () => {
       // SerialManager events
-      serialManager.on('portSelected', () => {
-        console.log('Port selected')
-        setPortSelected(true)
-        addLog('Info', 'Serial port selected')
-      })
+      serialManager.on("portSelected", () => {
+        console.log("Port selected");
+        setPortSelected(true);
+        addLog("Info", "Serial port selected");
+      });
 
-      serialManager.on('connected', () => {
-        console.log('Connected')
-        setConnectionStatus('Connected')
-        setIsConnected(true)
-        addLog('Info', 'Connected to serial port')
-      })
+      serialManager.on("connected", () => {
+        console.log("Connected");
+        setConnectionStatus("Connected");
+        setIsConnected(true);
+        addLog("Info", "Connected to serial port");
+      });
 
-      serialManager.on('disconnected', () => {
-        console.log('Disconnected')
-        setConnectionStatus('Disconnected')
-        setIsConnected(false)
-        setIsMonitoring(false)
-        setPortDisconnected(false) // Clear disconnect flag on normal disconnect
-        addLog('Info', 'Disconnected from serial port')
-      })
+      serialManager.on("disconnected", () => {
+        console.log("Disconnected");
+        setConnectionStatus("Disconnected");
+        setIsConnected(false);
+        setIsMonitoring(false);
+        setPortDisconnected(false); // Clear disconnect flag on normal disconnect
+        addLog("Info", "Disconnected from serial port");
+      });
 
-      serialManager.on('portDisconnected', () => {
-        console.log('Port disconnected unexpectedly')
-        setConnectionStatus('Disconnected')
-        setIsConnected(false)
-        setIsMonitoring(false)
-        setPortDisconnected(true) // Set disconnect flag for unexpected disconnect
+      serialManager.on("portDisconnected", () => {
+        console.log("Port disconnected unexpectedly");
+        setConnectionStatus("Disconnected");
+        setIsConnected(false);
+        setIsMonitoring(false);
+        setPortDisconnected(true); // Set disconnect flag for unexpected disconnect
         addLog(
-          'Warning',
-          'Serial port disconnected unexpectedly (cable unplugged or permission revoked)'
-        )
-      })
+          "Warning",
+          "Serial port disconnected unexpectedly (cable unplugged or permission revoked)",
+        );
+      });
 
-      serialManager.on('error', (error: Error) => {
-        addLog('Error', `Serial communication error: ${error.message}`)
-      })
+      serialManager.on("error", (error: Error) => {
+        addLog("Error", `Serial communication error: ${error.message}`);
+      });
 
-      serialManager.on('data', (data: Uint8Array) => {
-        modbusClient.handleResponse(data)
+      serialManager.on("data", (data: Uint8Array) => {
+        modbusClient.handleResponse(data);
         addLog(
-          'Received',
+          "Received",
           Array.from(data)
-            .map((b) => `0x${b.toString(16).padStart(2, '0')}`)
-            .join(' ')
-        )
-      })
+            .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
+            .join(" "),
+        );
+      });
 
       // ModbusClient events
-      modbusClient.on('response', (response: ModbusResponse) => {
-        setData((prev) => [...prev.slice(-99), response]) // 最新100件保持
+      modbusClient.on("response", (response: ModbusResponse) => {
+        setData((prev) => [...prev.slice(-99), response]); // 最新100件保持
         addLog(
-          'Info',
-          `Modbus response (${response.functionCodeLabel}): received ${response.data.length} values`
-        )
-      })
+          "Info",
+          `Modbus response (${response.functionCodeLabel}): received ${response.data.length} values`,
+        );
+      });
 
-      modbusClient.on('error', (error: Error) => {
-        addLog('Error', `Modbus communication error: ${error.message}`)
-      })
+      modbusClient.on("error", (error: Error) => {
+        addLog("Error", `Modbus communication error: ${error.message}`);
+      });
 
-      modbusClient.on('request', (data: Uint8Array) => {
-        serialManager.send(data)
+      modbusClient.on("request", (data: Uint8Array) => {
+        serialManager.send(data);
         addLog(
-          'Sent',
+          "Sent",
           Array.from(data)
-            .map((b) => `0x${b.toString(16).padStart(2, '0')}`)
-            .join(' ')
-        )
-      })
-    }
+            .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
+            .join(" "),
+        );
+      });
+    };
 
-    setupEventListeners()
-    modbusClient.setProtocol(protocol)
+    setupEventListeners();
+    modbusClient.protocol = protocol;
 
     return () => {
       // Cleanup
-      serialManager.disconnect()
-      modbusClient.stopMonitoring()
-    }
-  }, [serialManager, modbusClient, protocol])
+      serialManager.disconnect();
+      modbusClient.stopMonitoring();
+    };
+  }, [serialManager, modbusClient, protocol]);
 
   const addLog = (type: string, message: string) => {
-    const time = new Date().toLocaleTimeString()
-    setLogs((prev) => [...prev.slice(-99), { message, timestamp: time, type }]) // 最新100件保持
-  }
+    const time = new Date().toLocaleTimeString();
+    setLogs((prev) => [...prev.slice(-99), { message, timestamp: time, type }]); // 最新100件保持
+  };
 
   const handlePortSelect = async () => {
     try {
-      await serialManager.selectPort()
+      await serialManager.selectPort();
     } catch (error) {
-      addLog('Error', `Port selection error: ${(error as Error).message}`)
+      addLog("Error", `Port selection error: ${(error as Error).message}`);
     }
-  }
+  };
 
   const handleConnect = async () => {
     try {
-      await serialManager.connect(serialConfig)
-      setPortDisconnected(false) // Clear disconnect flag on successful connection
+      await serialManager.connect(serialConfig);
+      setPortDisconnected(false); // Clear disconnect flag on successful connection
     } catch (error) {
-      addLog('Error', `Connection error: ${(error as Error).message}`)
+      addLog("Error", `Connection error: ${(error as Error).message}`);
     }
-  }
+  };
 
   const handleDisconnect = async () => {
     try {
-      await serialManager.disconnect()
+      await serialManager.disconnect();
     } catch (error) {
-      addLog('Error', `Disconnection error: ${(error as Error).message}`)
+      addLog("Error", `Disconnection error: ${(error as Error).message}`);
     }
-  }
+  };
 
   const handleReconnect = async () => {
     try {
-      addLog('Info', 'Attempting to reconnect...')
-      await serialManager.reconnect(serialConfig)
-      setPortDisconnected(false) // Clear disconnect flag on successful reconnection
-      addLog('Info', 'Reconnected successfully')
+      addLog("Info", "Attempting to reconnect...");
+      await serialManager.reconnect(serialConfig);
+      setPortDisconnected(false); // Clear disconnect flag on successful reconnection
+      addLog("Info", "Reconnected successfully");
     } catch (error) {
-      addLog('Error', `Reconnection error: ${(error as Error).message}`)
+      addLog("Error", `Reconnection error: ${(error as Error).message}`);
     }
-  }
+  };
 
   const handleRead = async () => {
     try {
-      const config: ModbusReadConfig = { ...readConfig, slaveId }
-      await modbusClient.read(config)
+      const config: ModbusReadConfig = { ...readConfig, slaveId };
+      await modbusClient.read(config);
     } catch (error) {
-      addLog('Error', `Read error: ${(error as Error).message}`)
+      addLog("Error", `Read error: ${(error as Error).message}`);
     }
-  }
+  };
 
   const handleWrite = async () => {
     try {
-      let value: number | number[]
+      let value: number | number[];
 
       if (writeConfig.functionCode === 15) {
         // FC15 - Write Multiple Coils
-        value = parseCoilValues(writeConfig.multiValues)
+        value = parseCoilValues(writeConfig.multiValues);
         addLog(
-          'Info',
-          `Writing ${value.length} coils starting at address ${writeConfig.address}`
-        )
+          "Info",
+          `Writing ${value.length} coils starting at address ${writeConfig.address}`,
+        );
       } else if (writeConfig.functionCode === 16) {
         // FC16 - Write Multiple Registers
-        value = parseRegisterValues(writeConfig.multiValues)
+        value = parseRegisterValues(writeConfig.multiValues);
         addLog(
-          'Info',
-          `Writing ${value.length} registers starting at address ${writeConfig.address}`
-        )
+          "Info",
+          `Writing ${value.length} registers starting at address ${writeConfig.address}`,
+        );
       } else {
         // FC05/06 - Single writes
         if (hexDisplay) {
-          value = Number.parseInt(writeConfig.value, 16)
+          value = Number.parseInt(writeConfig.value, 16);
         } else {
-          value = Number.parseInt(writeConfig.value, 10)
+          value = Number.parseInt(writeConfig.value, 10);
         }
 
         if (Number.isNaN(value)) {
-          throw new Error('Invalid value format')
+          throw new Error("Invalid value format");
         }
       }
 
@@ -245,186 +254,186 @@ export function App() {
         functionCode: writeConfig.functionCode,
         slaveId,
         value,
-      }
+      };
 
-      await modbusClient.write(config)
+      await modbusClient.write(config);
     } catch (error) {
-      addLog('Error', `Write error: ${(error as Error).message}`)
+      addLog("Error", `Write error: ${(error as Error).message}`);
     }
-  }
+  };
 
   const handleMonitorToggle = () => {
     if (isMonitoring) {
-      modbusClient.stopMonitoring()
-      setIsMonitoring(false)
-      addLog('Info', 'Stopped monitoring')
+      modbusClient.stopMonitoring();
+      setIsMonitoring(false);
+      addLog("Info", "Stopped monitoring");
     } else {
-      const config: ModbusReadConfig = { ...readConfig, slaveId }
-      modbusClient.startMonitoring(config, pollingInterval)
-      setIsMonitoring(true)
-      addLog('Info', `Started monitoring (interval: ${pollingInterval}ms)`)
+      const config: ModbusReadConfig = { ...readConfig, slaveId };
+      modbusClient.startMonitoring(config, pollingInterval);
+      setIsMonitoring(true);
+      addLog("Info", `Started monitoring (interval: ${pollingInterval}ms)`);
     }
-  }
+  };
 
-  const handleProtocolChange = (newProtocol: 'rtu' | 'ascii') => {
-    setProtocol(newProtocol)
-    modbusClient.setProtocol(newProtocol)
-    addLog('Info', `Protocol changed to ${newProtocol.toUpperCase()}`)
-  }
+  const handleProtocolChange = (newProtocol: ModbusProtocol) => {
+    setProtocol(newProtocol);
+    modbusClient.protocol = newProtocol;
+    addLog("Info", `Protocol changed to ${newProtocol.toUpperCase()}`);
+  };
 
   const handlePollingIntervalChange = (value: number) => {
     // Clamp to valid range
-    const clampedValue = Math.max(100, Math.min(60000, value))
-    setPollingInterval(clampedValue)
-    localStorage.setItem('modbus-polling-interval', clampedValue.toString())
+    const clampedValue = Math.max(100, Math.min(60000, value));
+    setPollingInterval(clampedValue);
+    localStorage.setItem("modbus-polling-interval", clampedValue.toString());
 
     if (clampedValue !== value) {
       addLog(
-        'Warning',
-        `Polling interval clamped to ${clampedValue}ms (valid range: 100-60000ms)`
-      )
+        "Warning",
+        `Polling interval clamped to ${clampedValue}ms (valid range: 100-60000ms)`,
+      );
     }
-  }
+  };
 
   const clearLogs = () => {
-    setLogs([])
-    setData([])
-  }
+    setLogs([]);
+    setData([]);
+  };
 
   const copyLogEntry = async (log: {
-    timestamp: string
-    type: string
-    message: string
+    timestamp: string;
+    type: string;
+    message: string;
   }) => {
     try {
-      const text = `${log.timestamp} [${log.type}] ${log.message}`
-      await navigator.clipboard.writeText(text)
-      console.log('Copied log entry:', text)
+      const text = `${log.timestamp} [${log.type}] ${log.message}`;
+      await navigator.clipboard.writeText(text);
+      console.log("Copied log entry:", text);
     } catch (err) {
-      console.error('Failed to copy log entry:', err)
+      console.error("Failed to copy log entry:", err);
     }
-  }
+  };
 
   const copyAllLogs = useCallback(async () => {
     try {
       const allLogsText = logs
         .map((log) => `${log.timestamp} [${log.type}] ${log.message}`)
-        .join('\n')
-      await navigator.clipboard.writeText(allLogsText)
-      console.log('Copied all logs')
+        .join("\n");
+      await navigator.clipboard.writeText(allLogsText);
+      console.log("Copied all logs");
     } catch (err) {
-      console.error('Failed to copy all logs:', err)
+      console.error("Failed to copy all logs:", err);
     }
-  }, [logs])
+  }, [logs]);
 
   const formatValue = (value: number) => {
     return hexDisplay
-      ? `0x${value.toString(16).toUpperCase().padStart(4, '0')}`
-      : value.toString()
-  }
+      ? `0x${value.toString(16).toUpperCase().padStart(4, "0")}`
+      : value.toString();
+  };
 
   // Memoized event handlers to prevent unnecessary re-renders
   const handleReadFunctionCodeChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLSelectElement
-    const value = Number(target.value)
+    const target = e.currentTarget as HTMLSelectElement;
+    const value = Number(target.value);
     if (isReadFunctionCode(value)) {
-      setReadConfig((prev) => ({ ...prev, functionCode: value }))
+      setReadConfig((prev) => ({ ...prev, functionCode: value }));
     } else {
-      console.error('Invalid read function code:', value)
+      console.error("Invalid read function code:", value);
     }
-  }, [])
+  }, []);
 
   const handleWriteFunctionCodeChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLSelectElement
-    const value = Number(target.value)
+    const target = e.currentTarget as HTMLSelectElement;
+    const value = Number(target.value);
     if (isWriteFunctionCode(value)) {
-      setWriteConfig((prev) => ({ ...prev, functionCode: value }))
+      setWriteConfig((prev) => ({ ...prev, functionCode: value }));
     } else {
-      console.error('Invalid write function code:', value)
+      console.error("Invalid write function code:", value);
     }
-  }, [])
+  }, []);
 
   const handleWriteValueChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLInputElement | HTMLTextAreaElement
-    setWriteConfig((prev) => ({ ...prev, value: target.value }))
-  }, [])
+    const target = e.currentTarget as HTMLInputElement | HTMLTextAreaElement;
+    setWriteConfig((prev) => ({ ...prev, value: target.value }));
+  }, []);
 
   const handleWriteMultiValuesChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLTextAreaElement
-    setWriteConfig((prev) => ({ ...prev, multiValues: target.value }))
-  }, [])
+    const target = e.currentTarget as HTMLTextAreaElement;
+    setWriteConfig((prev) => ({ ...prev, multiValues: target.value }));
+  }, []);
 
   const handleSlaveIdChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLInputElement
-    setSlaveId(Number(target.value))
-  }, [])
+    const target = e.currentTarget as HTMLInputElement;
+    setSlaveId(Number(target.value));
+  }, []);
 
   const handleHexDisplayChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLInputElement
-    setHexDisplay(target.checked)
-  }, [])
+    const target = e.currentTarget as HTMLInputElement;
+    setHexDisplay(target.checked);
+  }, []);
   // Helper functions for multi-write operations
   const parseCoilValues = (input: string): number[] => {
     // Parse comma-separated or space-separated bits (0/1)
     const values = input
       .split(/[,\s]+/)
       .map((v) => v.trim())
-      .filter((v) => v !== '')
+      .filter((v) => v !== "")
       .map((v) => {
-        const num = Number.parseInt(v, 10)
+        const num = Number.parseInt(v, 10);
         if (num !== 0 && num !== 1) {
-          throw new Error(`Invalid coil value: ${v}. Must be 0 or 1.`)
+          throw new Error(`Invalid coil value: ${v}. Must be 0 or 1.`);
         }
-        return num
-      })
+        return num;
+      });
 
     if (values.length === 0) {
-      throw new Error('No coil values provided')
+      throw new Error("No coil values provided");
     }
     if (values.length > 1968) {
-      throw new Error(`Too many coils: ${values.length}. Maximum is 1968.`)
+      throw new Error(`Too many coils: ${values.length}. Maximum is 1968.`);
     }
 
-    return values
-  }
+    return values;
+  };
 
   const parseRegisterValues = (input: string): number[] => {
     // Parse comma-separated, newline-separated, or space-separated register values
     const values = input
       .split(/[,\n\s]+/)
       .map((v) => v.trim())
-      .filter((v) => v !== '')
+      .filter((v) => v !== "")
       .map((v) => {
-        let num: number
-        if (hexDisplay && v.startsWith('0x')) {
-          num = Number.parseInt(v, 16)
+        let num: number;
+        if (hexDisplay && v.startsWith("0x")) {
+          num = Number.parseInt(v, 16);
         } else if (hexDisplay) {
-          num = Number.parseInt(v, 16)
+          num = Number.parseInt(v, 16);
         } else {
-          num = Number.parseInt(v, 10)
+          num = Number.parseInt(v, 10);
         }
 
         if (Number.isNaN(num) || num < 0 || num > 65535) {
-          throw new Error(`Invalid register value: ${v}. Must be 0-65535.`)
+          throw new Error(`Invalid register value: ${v}. Must be 0-65535.`);
         }
-        return num
-      })
+        return num;
+      });
 
     if (values.length === 0) {
-      throw new Error('No register values provided')
+      throw new Error("No register values provided");
     }
     if (values.length > 123) {
-      throw new Error(`Too many registers: ${values.length}. Maximum is 123.`)
+      throw new Error(`Too many registers: ${values.length}. Maximum is 123.`);
     }
 
-    return values
-  }
+    return values;
+  };
 
   const formatAddress = (address: number) => {
     return hexDisplay
-      ? `0x${address.toString(16).toUpperCase().padStart(4, '0')}`
-      : address.toString()
-  }
+      ? `0x${address.toString(16).toUpperCase().padStart(4, "0")}`
+      : address.toString();
+  };
 
   return (
     <div className="container">
@@ -433,9 +442,9 @@ export function App() {
         <div className="connection-status">
           <span
             className={
-              connectionStatus === 'Connected'
-                ? 'status-connected'
-                : 'status-disconnected'
+              connectionStatus === "Connected"
+                ? "status-connected"
+                : "status-disconnected"
             }
           >
             {connectionStatus}
@@ -553,7 +562,7 @@ export function App() {
                 onChange={(e) =>
                   setSerialConfig((prev: SerialConfig) => ({
                     ...prev,
-                    parity: e.currentTarget.value as 'none' | 'even' | 'odd',
+                    parity: e.currentTarget.value as "none" | "even" | "odd",
                   }))
                 }
                 value={serialConfig.parity}
@@ -603,7 +612,7 @@ export function App() {
                 disabled={isConnected}
                 id="protocol"
                 onChange={(e) =>
-                  handleProtocolChange(e.currentTarget.value as 'rtu' | 'ascii')
+                  handleProtocolChange(e.currentTarget.value as ModbusProtocol)
                 }
                 value={protocol}
               >
@@ -699,7 +708,7 @@ export function App() {
                 onClick={handleMonitorToggle}
                 type="button"
               >
-                {isMonitoring ? 'Stop Monitor' : 'Start Monitor'}
+                {isMonitoring ? "Stop Monitor" : "Start Monitor"}
               </button>
             </div>
           </div>
@@ -728,8 +737,8 @@ export function App() {
               <label htmlFor="writeAddress">
                 {writeConfig.functionCode === 15 ||
                 writeConfig.functionCode === 16
-                  ? 'Start Address:'
-                  : 'Write Address:'}
+                  ? "Start Address:"
+                  : "Write Address:"}
               </label>
               <input
                 disabled={!isConnected}
@@ -774,7 +783,7 @@ export function App() {
                   rows={3}
                   value={writeConfig.multiValues}
                 />
-                <small style={{ color: '#666', fontSize: '12px' }}>
+                <small style={{ color: "#666", fontSize: "12px" }}>
                   Enter comma or space-separated bits (0 or 1). Max 1968 coils.
                 </small>
               </div>
@@ -789,16 +798,16 @@ export function App() {
                   onChange={handleWriteMultiValuesChange}
                   placeholder={
                     hexDisplay
-                      ? 'e.g. 0x1234,0x5678 or line-separated (max 123 registers)'
-                      : 'e.g. 1234,5678 or line-separated (max 123 registers)'
+                      ? "e.g. 0x1234,0x5678 or line-separated (max 123 registers)"
+                      : "e.g. 1234,5678 or line-separated (max 123 registers)"
                   }
                   rows={4}
                   value={writeConfig.multiValues}
                 />
-                <small style={{ color: '#666', fontSize: '12px' }}>
+                <small style={{ color: "#666", fontSize: "12px" }}>
                   Enter comma, space, or line-separated values (0-65535). Max
                   123 registers.
-                  {hexDisplay && ' Use 0x prefix for hex values.'}
+                  {hexDisplay && " Use 0x prefix for hex values."}
                 </small>
               </div>
             )}
@@ -831,7 +840,7 @@ export function App() {
                 checked={hexDisplay}
                 onChange={handleHexDisplayChange}
                 type="checkbox"
-              />{' '}
+              />{" "}
               Hex Display
             </label>
             <button
@@ -870,13 +879,13 @@ export function App() {
                         <td>{response.functionCodeLabel}</td>
                         <td>
                           {formatAddress(
-                            (readConfig.startAddress || 0) + dataIndex
+                            (readConfig.startAddress || 0) + dataIndex,
                           )}
                         </td>
                         <td>{formatValue(value)}</td>
                         <td>{response.timestamp.toLocaleTimeString()}</td>
                       </tr>
-                    ))
+                    )),
                   )}
                 </tbody>
               </table>
@@ -887,7 +896,7 @@ export function App() {
               <div className="log-display">
                 {logs.map((log, index) => (
                   <div
-                    className={`log-entry log-${log.type === 'Error' ? 'error' : log.type === 'Sent' ? 'sent' : log.type === 'Received' ? 'received' : 'info'}`}
+                    className={`log-entry log-${log.type === "Error" ? "error" : log.type === "Sent" ? "sent" : log.type === "Received" ? "received" : "info"}`}
                     key={`log-${log.timestamp}-${index}`}
                   >
                     <span className="log-timestamp">{log.timestamp}</span>
@@ -909,5 +918,5 @@ export function App() {
         </section>
       </main>
     </div>
-  )
+  );
 }
