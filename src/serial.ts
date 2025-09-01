@@ -32,6 +32,16 @@ export class EventEmitter<
     }
   }
 
+  off<K extends keyof T>(event: K, listener: (...args: T[K]) => void) {
+    const eventListeners = this.listeners[event];
+    if (eventListeners) {
+      const index = eventListeners.indexOf(listener);
+      if (index !== -1) {
+        eventListeners.splice(index, 1);
+      }
+    }
+  }
+
   emit<K extends keyof T>(event: K, ...args: T[K]) {
     const eventListeners = this.listeners[event];
     if (eventListeners) {
