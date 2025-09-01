@@ -40,8 +40,7 @@ export interface ModbusWriteConfig {
 // Re-export ModbusResponse for backward compatibility.
 export type { ModbusResponse };
 
-// Export transport and pure-function APIs.
-export * from "./api/pure-functions.ts";
+// Export transport APIs and result helpers (pure-function unified API removed; import from './api/rtu.ts' or './api/ascii.ts').
 export * from "./transport/index.ts";
 export * from "./types/result.ts";
 

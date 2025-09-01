@@ -1,5 +1,6 @@
 // Tests for pure function API
 import { beforeEach, describe, expect, it } from "vitest";
+import { readHoldingRegisters as readHoldingRegistersASCII } from "../src/api/ascii.ts";
 import {
   readCoils,
   readDiscreteInputs,
@@ -9,7 +10,7 @@ import {
   writeMultipleRegisters,
   writeSingleCoil,
   writeSingleRegister,
-} from "../src/api/pure-functions.ts";
+} from "../src/api/rtu.ts";
 import { calculateCRC16 } from "../src/crc.ts";
 import {
   MockTransport,
@@ -412,15 +413,11 @@ describe("Pure Function API", () => {
   });
 
   describe("Protocol Support", () => {
-    it("should support ASCII protocol", async () => {
-      // This is a basic test - full ASCII protocol support would require more complex setup
-      const result = await readHoldingRegisters(transport, 1, 0, 1, {
-        protocol: "ascii",
-        timeout: 50, // Short timeout since we don't have ASCII response setup
+    it("should support ASCII protocol via ascii import", async () => {
+      const result = await readHoldingRegistersASCII(transport, 1, 0, 1, {
+        timeout: 50,
       });
-
-      // Should timeout but not crash
-      expect(isErr(result)).toBe(true);
+      expect(isErr(result)).toBe(true); // timeout expected (no response configured)
     });
 
     it("should use RTU protocol by default", async () => {

@@ -1,9 +1,6 @@
 // Integration tests showing both class-based and pure function APIs working together
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  readHoldingRegisters,
-  writeSingleRegister,
-} from "../src/api/pure-functions.ts";
+import { readHoldingRegisters, writeSingleRegister } from "../src/api/rtu.ts";
 import { calculateCRC16 } from "../src/crc.ts";
 import { ModbusClient } from "../src/modbus.ts";
 import {

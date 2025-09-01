@@ -262,6 +262,11 @@ export function parseRTUFrame(buffer: number[]): ParseResult<ParsedFrame> {
  * returns the parsed payload or an error on invalid format / LRC mismatch.
  */
 export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
+  // Accept frames optionally terminated with CRLF ("\r\n"). The caller (ASCII stream scanner)
+  // currently slices including CRLF, so we normalize here to simplify downstream parsing.
+  if (frameString.endsWith("\r\n")) {
+    frameString = frameString.slice(0, -2);
+  }
   if (frameString.length < 3 || frameString[0] !== ":") {
     return {
       error: new ModbusFrameError("Invalid ASCII frame format"),
@@ -310,8 +315,9 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
   }
 
   const slaveId = messageBytes[0];
-  const functionCode = messageBytes[1];
-  const isException = (functionCode & 0x80) !== 0;
+  const rawFunctionCode = messageBytes[1];
+  const baseFunctionCode = rawFunctionCode & 0x7f;
+  const isException = (rawFunctionCode & 0x80) !== 0;
 
   let data: number[];
   let exceptionCode: number | undefined;
@@ -328,11 +334,11 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
   } else {
     if (
       messageBytes.length >= 3 &&
-      (functionCode & 0x7f) >= 1 &&
-      (functionCode & 0x7f) <= 4
+      baseFunctionCode >= 1 &&
+      baseFunctionCode <= 4
     ) {
       const byteCount = messageBytes[2];
-      data = messageBytes.slice(3, 3 + byteCount);
+      data = messageBytes.slice(3, 3 + byteCount); // only the data bytes (no byteCount)
     } else {
       data = messageBytes.slice(2);
     }
@@ -342,7 +348,8 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
     data: {
       data,
       exceptionCode,
-      functionCode: functionCode & 0x7f,
+      // For consistency with existing tests, expose base function code (mask exception bit)
+      functionCode: baseFunctionCode,
       isException,
       slaveId,
     },
@@ -407,11 +414,17 @@ export function validateASCIIFrame(frameString: string): {
     return { error: result.error, isValid: false };
   }
 
-  const frame: number[] = [
-    result.data.slaveId,
-    result.data.functionCode,
-    ...result.data.data,
-  ];
+  // Reconstruct the minimal raw frame bytes expected by ASCII request waiter.
+  // Important: preserve exception bit (0x80) so higher-level logic can detect
+  // Modbus exception responses. For exception frames include the exception
+  // code byte (which parseASCIIFrame keeps separate from data array).
+  const rawFunctionCode = result.data.isException
+    ? result.data.functionCode | 0x80
+    : result.data.functionCode;
+  const exceptionCode = result.data.exceptionCode ?? 0;
+  const frame: number[] = result.data.isException
+    ? [result.data.slaveId, rawFunctionCode, exceptionCode]
+    : [result.data.slaveId, rawFunctionCode, ...result.data.data];
 
   return { frame, isValid: true };
 }
