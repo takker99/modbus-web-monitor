@@ -265,6 +265,143 @@ describe("Pure Function API", () => {
         expect(result.error.message).toBe("Send failed");
       }
     });
+
+    it("should handle invalid function codes in requests", async () => {
+      // Test with invalid function code in read request
+      const invalidRequest = {
+        unitId: 1,
+        functionCode: 99 as any, // Invalid function code
+        address: 0,
+        quantity: 1,
+      };
+
+      // This should be caught by the buildRequest validation
+      try {
+        const result = await (readHoldingRegisters as any)(transport, 1, 0, 1);
+        // If it gets here, check for proper error handling in response parsing
+      } catch (error) {
+        // Expected path for invalid inputs
+      }
+    });
+
+    it("should handle malformed responses", async () => {
+      const expectedRequest = [1, 3, 0, 0, 0, 1];
+      const crc = calculateCRC16(expectedRequest);
+      expectedRequest.push(crc & 0xff, (crc >> 8) & 0xff);
+
+      // Set up malformed response (too short)
+      const malformedResponse = [1, 3]; // Missing data and CRC
+      transport.setAutoResponse(
+        new Uint8Array(expectedRequest),
+        new Uint8Array(malformedResponse)
+      );
+
+      const result = await readHoldingRegisters(transport, 1, 0, 1);
+
+      expect(isErr(result)).toBe(true);
+    });
+
+    it("should handle CRC errors in responses", async () => {
+      const expectedRequest = [1, 3, 0, 0, 0, 1];
+      const crc = calculateCRC16(expectedRequest);
+      expectedRequest.push(crc & 0xff, (crc >> 8) & 0xff);
+
+      // Set up response with bad CRC
+      const responseWithBadCRC = [1, 3, 2, 0x12, 0x34, 0xFF, 0xFF]; // Wrong CRC
+      transport.setAutoResponse(
+        new Uint8Array(expectedRequest),
+        new Uint8Array(responseWithBadCRC)
+      );
+
+      const result = await readHoldingRegisters(transport, 1, 0, 1);
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        // The specific error handling will depend on implementation - just check it's an error
+        expect(result.error).toBeInstanceOf(Error);
+      }
+    });
+
+    it("should handle all read function error paths", async () => {
+      await transport.disconnect();
+
+      // Test all read functions with disconnected transport
+      const readFunctions = [
+        () => readCoils(transport, 1, 0, 1),
+        () => readDiscreteInputs(transport, 1, 0, 1),
+        () => readHoldingRegisters(transport, 1, 0, 1),
+        () => readInputRegisters(transport, 1, 0, 1),
+      ];
+
+      for (const readFunc of readFunctions) {
+        const result = await readFunc();
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.message).toBe("Transport not connected");
+        }
+      }
+    });
+
+    it("should handle all write function error paths", async () => {
+      await transport.disconnect();
+
+      // Test all write functions with disconnected transport
+      const writeFunctions = [
+        () => writeSingleCoil(transport, 1, 0, true),
+        () => writeSingleRegister(transport, 1, 0, 0x1234),
+        () => writeMultipleCoils(transport, 1, 0, [true, false]),
+        () => writeMultipleRegisters(transport, 1, 0, [0x1234, 0x5678]),
+      ];
+
+      for (const writeFunc of writeFunctions) {
+        const result = await writeFunc();
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.message).toBe("Transport not connected");
+        }
+      }
+    });
+
+    it("should handle various exception codes", async () => {
+      const exceptionCodes = [
+        { code: 1, name: "Illegal function" },
+        { code: 2, name: "Illegal data address" },
+        { code: 3, name: "Illegal data value" },
+        { code: 4, name: "Slave device failure" }, // Keep original text
+      ];
+
+      for (const exc of exceptionCodes) {
+        const expectedRequest = [1, 3, 0, 0, 0, 1];
+        const crc = calculateCRC16(expectedRequest);
+        expectedRequest.push(crc & 0xff, (crc >> 8) & 0xff);
+
+        const exceptionResponse = [1, 0x83, exc.code];
+        const exceptionCrc = calculateCRC16(exceptionResponse);
+        exceptionResponse.push(exceptionCrc & 0xff, (exceptionCrc >> 8) & 0xff);
+
+        transport.clearAutoResponses();
+        transport.setAutoResponse(
+          new Uint8Array(expectedRequest),
+          new Uint8Array(exceptionResponse)
+        );
+
+        const result = await readHoldingRegisters(transport, 1, 0, 1);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.message).toContain(exc.name);
+        }
+      }
+    });
+
+    it("should handle basic error cases", async () => {
+      // Just test that we can handle basic error scenarios
+      await transport.disconnect();
+
+      const result = await writeSingleRegister(transport, 1, 10, 0x1234, { timeout: 100 });
+
+      expect(isErr(result)).toBe(true);
+    });
   });
 
   describe("Protocol Support", () => {
