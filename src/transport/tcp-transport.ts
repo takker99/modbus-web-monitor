@@ -1,7 +1,9 @@
-// TCP transport implementation for Modbus TCP
-// Note: This is a placeholder implementation since Web browsers don't support raw TCP sockets
-// In a Node.js environment, this would use actual TCP sockets
-
+/**
+ * TCP transport implementation for Modbus TCP.
+ *
+ * Note: This is a placeholder implementation since Web browsers don't
+ * support raw TCP sockets. In Node.js this would use `net.Socket`.
+ */
 import { EventEmitter } from "../serial.ts";
 import type {
   IModbusTransport,
@@ -10,7 +12,10 @@ import type {
   TransportState,
 } from "./transport.ts";
 
-export class TcpTransport extends EventEmitter<TransportEvents> implements IModbusTransport {
+export class TcpTransport
+  extends EventEmitter<TransportEvents>
+  implements IModbusTransport
+{
   private _state: TransportState = "disconnected";
   private socket: WebSocket | null = null;
 
@@ -26,6 +31,9 @@ export class TcpTransport extends EventEmitter<TransportEvents> implements IModb
     return this._state === "connected";
   }
 
+  /**
+   * Establish a TCP (or placeholder) connection. Throws on browsers.
+   */
   async connect(): Promise<void> {
     if (this._state === "connected") {
       return;
@@ -34,22 +42,11 @@ export class TcpTransport extends EventEmitter<TransportEvents> implements IModb
     this.setState("connecting");
 
     try {
-      // Note: In a browser environment, we can't make raw TCP connections
-      // This would typically use WebSocket to a Modbus TCP bridge server
-      // For now, this throws an error to indicate the limitation
-      
-      // In a Node.js environment, this would be:
-      // const socket = net.createConnection(this.config.port, this.config.host);
-      
-      // For browser compatibility, we might use WebSocket to a bridge:
-      // const wsUrl = `ws://${this.config.host}:${this.config.port + 1000}/modbus`;
-      // this.socket = new WebSocket(wsUrl);
-      
+      // Browsers cannot create raw TCP sockets; instruct users to use a
+      // WebSocket bridge for Modbus TCP instead.
       throw new Error(
-        "TCP transport not supported in browser environment. " +
-        "Use WebSocket transport with a Modbus TCP bridge server."
+        "TCP transport not supported in browser environment. Use WebSocket transport with a Modbus TCP bridge server.",
       );
-      
     } catch (error) {
       this.setState("error");
       throw error;

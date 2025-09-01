@@ -1,20 +1,20 @@
 // Tests for Result type utilities
 import { describe, expect, it } from "vitest";
 import {
-  ok,
+  andThen,
+  combine,
   err,
-  isOk,
+  fromPromise,
   isErr,
+  isOk,
+  map,
+  mapAsync,
+  mapErr,
+  ok,
+  type Result,
+  toPromise,
   unwrap,
   unwrapOr,
-  map,
-  mapErr,
-  andThen,
-  fromPromise,
-  toPromise,
-  combine,
-  mapAsync,
-  type Result,
 } from "../src/types/result.ts";
 
 describe("Result Type", () => {
@@ -70,8 +70,8 @@ describe("Result Type", () => {
 
   describe("Mapping", () => {
     it("should map Ok result", () => {
-      const result = ok(5);
-      const mapped = map(result, x => x * 2);
+      const result = ok<number>(5);
+      const mapped = map(result, (x: number) => x * 2);
 
       expect(isOk(mapped)).toBe(true);
       if (isOk(mapped)) {
@@ -82,7 +82,7 @@ describe("Result Type", () => {
     it("should not map Err result", () => {
       const error = new Error("test");
       const result = err(error);
-      const mapped = map(result, x => x * 2);
+      const mapped = map(result, (x: number) => x * 2);
 
       expect(isErr(mapped)).toBe(true);
       if (isErr(mapped)) {
@@ -92,7 +92,7 @@ describe("Result Type", () => {
 
     it("should map error in Err result", () => {
       const result = err("original error");
-      const mapped = mapErr(result, e => new Error(`Wrapped: ${e}`));
+      const mapped = mapErr(result, (e) => new Error(`Wrapped: ${e}`));
 
       expect(isErr(mapped)).toBe(true);
       if (isErr(mapped)) {
@@ -102,7 +102,7 @@ describe("Result Type", () => {
 
     it("should not map error in Ok result", () => {
       const result = ok(42);
-      const mapped = mapErr(result, e => new Error(`Wrapped: ${e}`));
+      const mapped = mapErr(result, (e) => new Error(`Wrapped: ${e}`));
 
       expect(isOk(mapped)).toBe(true);
       if (isOk(mapped)) {
@@ -113,8 +113,8 @@ describe("Result Type", () => {
 
   describe("Chaining", () => {
     it("should chain Ok results", () => {
-      const result = ok(5);
-      const chained = andThen(result, x => ok(x * 2));
+      const result = ok<number>(5);
+      const chained = andThen(result, (x: number) => ok(x * 2));
 
       expect(isOk(chained)).toBe(true);
       if (isOk(chained)) {
@@ -125,7 +125,7 @@ describe("Result Type", () => {
     it("should not chain Err results", () => {
       const error = new Error("test");
       const result = err(error);
-      const chained = andThen(result, x => ok(x * 2));
+      const chained = andThen(result, (x: number) => ok(x * 2));
 
       expect(isErr(chained)).toBe(true);
       if (isErr(chained)) {
@@ -136,7 +136,7 @@ describe("Result Type", () => {
     it("should handle failure in chain", () => {
       const result = ok(5);
       const chainError = new Error("chain failed");
-      const chained = andThen(result, _ => err(chainError));
+      const chained = andThen(result, (_) => err(chainError));
 
       expect(isErr(chained)).toBe(true);
       if (isErr(chained)) {
@@ -176,15 +176,15 @@ describe("Result Type", () => {
     it("should convert Err result to failed promise", async () => {
       const error = new Error("test error");
       const result = err(error);
-      
+
       await expect(toPromise(result)).rejects.toBe(error);
     });
   });
 
   describe("Async Mapping", () => {
     it("should map Ok result with async function", async () => {
-      const result = ok(5);
-      const mapped = await mapAsync(result, async x => x * 2);
+      const result = ok<number>(5);
+      const mapped = await mapAsync(result, async (x: number) => x * 2);
 
       expect(isOk(mapped)).toBe(true);
       if (isOk(mapped)) {
@@ -195,7 +195,7 @@ describe("Result Type", () => {
     it("should not map Err result with async function", async () => {
       const error = new Error("test");
       const result = err(error);
-      const mapped = await mapAsync(result, async x => x * 2);
+      const mapped = await mapAsync(result, async (x: number) => x * 2);
 
       expect(isErr(mapped)).toBe(true);
       if (isErr(mapped)) {
@@ -206,7 +206,7 @@ describe("Result Type", () => {
     it("should handle async function errors", async () => {
       const result = ok(5);
       const asyncError = new Error("async error");
-      const mapped = await mapAsync(result, async _ => {
+      const mapped = await mapAsync(result, async (_) => {
         throw asyncError;
       });
 
@@ -265,10 +265,15 @@ describe("Result Type", () => {
 
     it("should handle custom error types", () => {
       class CustomError {
-        constructor(public code: number, public message: string) {}
+        constructor(
+          public code: number,
+          public message: string,
+        ) {}
       }
 
-      const result: Result<string, CustomError> = err(new CustomError(404, "Not found"));
+      const result: Result<string, CustomError> = err(
+        new CustomError(404, "Not found"),
+      );
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {

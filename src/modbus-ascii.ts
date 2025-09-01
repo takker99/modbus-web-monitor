@@ -4,10 +4,7 @@ import {
   buildWriteRequest as buildASCIIWriteRequest,
   type ModbusProtocol,
 } from "./frameBuilder.ts";
-import {
-  parseBitResponse,
-  parseRegisterResponse,
-} from "./frameParser.ts";
+import { parseBitResponse, parseRegisterResponse } from "./frameParser.ts";
 import { calculateLRC } from "./lrc.ts";
 import {
   ModbusClientBase,
@@ -15,17 +12,27 @@ import {
   type ModbusWriteConfig,
 } from "./modbus-base.ts";
 
+/**
+ * Modbus ASCII client implementation.
+ *
+ * Parses incoming ASCII frames (colon-started, CRLF-terminated), validates
+ * LRC and matches responses against the pending request. Uses the same
+ * single-pending-request policy as the RTU client.
+ */
 export class ModbusASCIIClient extends ModbusClientBase {
+  /** Raw byte buffer used when data arrives as Uint8Array. */
   #buffer: number[] = [];
+  /** Accumulated ASCII characters used to assemble a frame string. */
   #asciiBuffer: string = "";
+  /** Whether a frame start ':' has been detected and not yet closed. */
   #asciiFrameStarted = false;
 
   get protocol(): ModbusProtocol {
     return "ascii";
   }
 
+  /** Append received bytes to internal buffer and attempt parsing. */
   handleResponse(data: Uint8Array) {
-    // Append data to buffer
     this.#buffer.push(...Array.from(data));
     this.#handleASCIIResponse();
   }
@@ -38,55 +45,60 @@ export class ModbusASCIIClient extends ModbusClientBase {
     return buildASCIIWriteRequest(config, "ascii");
   }
 
+  /** Trigger parsing when buffer or ascii accumulation contains data. */
   protected processBufferedData(): void {
     if (this.#buffer.length > 0 || this.#asciiBuffer.length > 0) {
       this.#handleASCIIResponse();
     }
   }
 
+  /**
+   * Internal handler that assembles ASCII frame strings and parses a single
+   * complete frame per invocation.
+   *
+   * @private
+   */
   #handleASCIIResponse() {
     // Convert buffer to string to look for ASCII frame markers
     const newData = String.fromCharCode(...this.#buffer);
     this.#asciiBuffer += newData;
-    this.#buffer = []; // Clear the buffer as we've moved data to asciiBuffer
+    this.#buffer = [];
 
-    // Process only one complete frame at a time (like RTU mode)
-    // Look for start of frame ':'
+    // Only process one complete frame at a time.
     if (!this.#asciiFrameStarted) {
       const startIndex = this.#asciiBuffer.indexOf(":");
       if (startIndex === -1) {
-        // No start found, keep waiting
         return;
       }
-      // Remove everything before ':'
       this.#asciiBuffer = this.#asciiBuffer.substring(startIndex);
       this.#asciiFrameStarted = true;
     }
 
-    // Look for end of frame \r\n
     const endIndex = this.#asciiBuffer.indexOf("\r\n");
     if (endIndex === -1) {
-      // Frame not complete yet
       return;
     }
 
-    // Extract complete frame (including : but excluding \r\n)
     const frameString = this.#asciiBuffer.substring(0, endIndex);
     this.#asciiBuffer = this.#asciiBuffer.substring(endIndex + 2);
     this.#asciiFrameStarted = false;
 
-    // Parse the frame
     this.#parseASCIIFrame(frameString);
   }
 
+  /**
+   * Parse a complete ASCII frame string (starting with ':' and excluding CRLF).
+   * Validates format, hex content, and LRC before delegating to response
+   * handling logic.
+   *
+   * @private
+   */
   #parseASCIIFrame(frameString: string) {
-    // Frame should start with ':' and contain hex pairs
     if (frameString.length < 3 || frameString[0] !== ":") {
       this.#handleError(new Error("Invalid ASCII frame format"));
       return;
     }
 
-    // Remove the ':' and parse hex pairs
     const hexString = frameString.substring(1);
     if (hexString.length % 2 !== 0) {
       this.#handleError(
@@ -95,30 +107,24 @@ export class ModbusASCIIClient extends ModbusClientBase {
       return;
     }
 
-    // Convert hex pairs to bytes
     const frameBytes: number[] = [];
     for (let i = 0; i < hexString.length; i += 2) {
       const hexPair = hexString.substring(i, i + 2);
-
-      // Validate that both characters are valid hex digits
       if (!/^[0-9A-Fa-f]{2}$/.test(hexPair)) {
         this.#handleError(
           new Error(`Invalid hex pair in ASCII frame: ${hexPair}`),
         );
         return;
       }
-
       const byte = parseInt(hexPair, 16);
       frameBytes.push(byte);
     }
 
-    // Need at least slave + function + LRC = 3 bytes
     if (frameBytes.length < 3) {
       this.#handleError(new Error("ASCII frame too short"));
       return;
     }
 
-    // Extract LRC (last byte) and message (all but last byte)
     const receivedLRC = frameBytes[frameBytes.length - 1];
     const messageBytes = frameBytes.slice(0, -1);
     const calculatedLRC = calculateLRC(messageBytes);
@@ -128,7 +134,6 @@ export class ModbusASCIIClient extends ModbusClientBase {
       return;
     }
 
-    // Validate against pending request
     if (!this.pendingRequest) {
       return;
     }
@@ -140,7 +145,6 @@ export class ModbusASCIIClient extends ModbusClientBase {
       return;
     }
 
-    // Handle exception frame (function | 0x80)
     if (functionCode & 0x80) {
       if (messageBytes.length < 3) {
         this.#handleError(new Error("Invalid exception frame length"));
@@ -151,10 +155,15 @@ export class ModbusASCIIClient extends ModbusClientBase {
       return;
     }
 
-    // Process valid response
     this.#processValidASCIIResponse(messageBytes);
   }
 
+  /**
+   * Handle a validated ASCII response message bytes and complete the pending
+   * request with a decoded ModbusResponse.
+   *
+   * @private
+   */
   #processValidASCIIResponse(messageBytes: number[]) {
     if (!this.pendingRequest) return;
 
@@ -163,11 +172,9 @@ export class ModbusASCIIClient extends ModbusClientBase {
 
     let data: number[] = [];
     if (functionCode === 3 || functionCode === 4) {
-      // Register read response (FC03/FC04)
       const dataLength = messageBytes[2];
       data = parseRegisterResponse(messageBytes, dataLength);
     } else if (functionCode === 1 || functionCode === 2) {
-      // Coil/input status read response (FC01/FC02)
       const dataLength = messageBytes[2];
       data = parseBitResponse(messageBytes, dataLength);
     }
@@ -176,11 +183,16 @@ export class ModbusASCIIClient extends ModbusClientBase {
     this.completePendingRequest(modbusResponse);
   }
 
+  /**
+   * Handle an error (numeric Modbus exception code or Error) for the
+   * currently pending request. Clears ASCII buffers on error.
+   *
+   * @private
+   */
   #handleError(error: number | Error) {
     if (!this.pendingRequest) return;
 
     if (typeof error === "number") {
-      // Use the new ModbusExceptionError for consistency
       this.rejectPendingRequest(new ModbusExceptionError(error));
     } else {
       this.rejectPendingRequest(error);

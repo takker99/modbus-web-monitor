@@ -1,10 +1,16 @@
 // Integration tests showing both class-based and pure function APIs working together
-import { describe, expect, it, beforeEach } from "vitest";
-import { ModbusClient } from "../src/modbus.ts";
-import { readHoldingRegisters, writeSingleRegister } from "../src/api/pure-functions.ts";
-import { MockTransport, type MockTransportConfig } from "../src/transport/index.ts";
-import { isOk, isErr, map, unwrapOr } from "../src/types/result.ts";
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+  readHoldingRegisters,
+  writeSingleRegister,
+} from "../src/api/pure-functions.ts";
 import { calculateCRC16 } from "../src/crc.ts";
+import { ModbusClient } from "../src/modbus.ts";
+import {
+  MockTransport,
+  type MockTransportConfig,
+} from "../src/transport/index.ts";
+import { isErr, isOk, map, unwrapOr } from "../src/types/result.ts";
 
 describe("API Integration", () => {
   let transport: MockTransport;
@@ -13,10 +19,10 @@ describe("API Integration", () => {
   beforeEach(async () => {
     // Set up mock transport
     const config: MockTransportConfig = {
-      type: "mock",
       name: "integration-test",
+      type: "mock",
     };
-    
+
     transport = new MockTransport(config);
     await transport.connect();
     transport.clearSentData();
@@ -29,7 +35,7 @@ describe("API Integration", () => {
 
   it("should work with both APIs simultaneously", async () => {
     // Setup auto-responses for both APIs
-    
+
     // For pure function API - read holding registers
     const readRequest = [1, 3, 0, 0, 0, 2]; // Read 2 registers from address 0
     const readCrc = calculateCRC16(readRequest);
@@ -41,35 +47,35 @@ describe("API Integration", () => {
 
     transport.setAutoResponse(
       new Uint8Array(readRequest),
-      new Uint8Array(readResponse)
+      new Uint8Array(readResponse),
     );
 
-    // For class-based API - write single register  
-    const writeRequest = [1, 6, 0, 10, 0xAB, 0xCD]; // Write 0xABCD to address 10
+    // For class-based API - write single register
+    const writeRequest = [1, 6, 0, 10, 0xab, 0xcd]; // Write 0xABCD to address 10
     const writeCrc = calculateCRC16(writeRequest);
     writeRequest.push(writeCrc & 0xff, (writeCrc >> 8) & 0xff);
 
     transport.setAutoResponse(
       new Uint8Array(writeRequest),
-      new Uint8Array(writeRequest) // Echo for write operations
+      new Uint8Array(writeRequest), // Echo for write operations
     );
 
     // Test pure function API
     const readResult = await readHoldingRegisters(transport, 1, 0, 2);
     expect(isOk(readResult)).toBe(true);
-    
+
     if (isOk(readResult)) {
       expect(readResult.data.data).toEqual([0x1234, 0x5678]);
       expect(readResult.data.functionCodeLabel).toBe("Holding Registers");
     }
 
     // Test pure function API write
-    const writeResult = await writeSingleRegister(transport, 1, 10, 0xABCD);
+    const writeResult = await writeSingleRegister(transport, 1, 10, 0xabcd);
     expect(isOk(writeResult)).toBe(true);
 
     // Verify both operations sent the expected data
     expect(transport.getSentDataCount()).toBe(2);
-    
+
     const sentData = transport.sentData;
     expect(sentData[0]).toEqual(new Uint8Array(readRequest));
     expect(sentData[1]).toEqual(new Uint8Array(writeRequest));
@@ -79,14 +85,18 @@ describe("API Integration", () => {
     // Don't set up any auto-responses to trigger timeouts
 
     // Test pure function API timeout
-    const readResult = await readHoldingRegisters(transport, 1, 0, 1, { timeout: 50 });
+    const readResult = await readHoldingRegisters(transport, 1, 0, 1, {
+      timeout: 50,
+    });
     expect(isErr(readResult)).toBe(true);
     if (isErr(readResult)) {
       expect(readResult.error.message).toBe("Request timeout");
     }
 
     // Test pure function API write timeout
-    const writeResult = await writeSingleRegister(transport, 1, 0, 123, { timeout: 50 });
+    const writeResult = await writeSingleRegister(transport, 1, 0, 123, {
+      timeout: 50,
+    });
     expect(isErr(writeResult)).toBe(true);
     if (isErr(writeResult)) {
       expect(writeResult.error.message).toBe("Request timeout");
@@ -105,7 +115,7 @@ describe("API Integration", () => {
 
     transport.setAutoResponse(
       new Uint8Array(request),
-      new Uint8Array(exceptionResponse)
+      new Uint8Array(exceptionResponse),
     );
 
     // Pure function API - Result type approach
@@ -135,23 +145,21 @@ describe("API Integration", () => {
 
     transport.setAutoResponse(
       new Uint8Array(request),
-      new Uint8Array(response)
+      new Uint8Array(response),
     );
 
     // Demonstrate Result composition
     const result = await readHoldingRegisters(transport, 1, 0, 1);
-    
+
     // Extract just the register value and double it
-    const doubledValue = result.success 
-      ? result.data.data[0] * 2
-      : 0;
+    const doubledValue = result.success ? result.data.data[0] * 2 : 0;
 
     expect(doubledValue).toBe(132); // 66 * 2
 
     // Or use functional composition
-    const extractedValue = map(result, response => response.data[0]);
+    const extractedValue = map(result, (response) => response.data[0]);
     const finalValue = unwrapOr(extractedValue, 0);
-    
+
     expect(finalValue).toBe(66);
   });
 
@@ -160,7 +168,7 @@ describe("API Integration", () => {
     expect(transport.state).toBe("connected");
     expect(transport.connected).toBe(true);
 
-    let stateChanges: string[] = [];
+    const stateChanges: string[] = [];
     transport.on("stateChange", (state) => {
       stateChanges.push(state);
     });

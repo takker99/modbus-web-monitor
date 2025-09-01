@@ -58,10 +58,12 @@ describe("Protocol-specific clients", () => {
       // ASCII frame: slave=01, fc=03, bytes=02, data=1234
       const messageBytes = [0x01, 0x03, 0x02, 0x12, 0x34];
       const lrc = calculateLRC(messageBytes);
-      const hexString = messageBytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('') + 
-                       lrc.toString(16).padStart(2, '0').toUpperCase();
+      const hexString =
+        messageBytes
+          .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
+          .join("") + lrc.toString(16).padStart(2, "0").toUpperCase();
       const responseFrame = `:${hexString}\r\n`;
-      
+
       client.handleResponse(
         new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0))),
       );
@@ -84,11 +86,11 @@ describe("Protocol-specific clients", () => {
     it("should maintain the same API for the main ModbusClient", async () => {
       const { ModbusClient } = await import("../src/modbus.ts");
       const client = new ModbusClient();
-      
+
       // Test protocol switching
       client.protocol = "rtu";
       expect(client.protocol).toBe("rtu");
-      
+
       client.protocol = "ascii";
       expect(client.protocol).toBe("ascii");
 
@@ -103,7 +105,7 @@ describe("Protocol-specific clients", () => {
     it("should delegate correctly to protocol-specific clients", async () => {
       const { ModbusClient } = await import("../src/modbus.ts");
       const client = new ModbusClient();
-      
+
       // Test RTU delegation
       client.protocol = "rtu";
       const rtuPromise = client.read({
@@ -134,10 +136,12 @@ describe("Protocol-specific clients", () => {
       // ASCII frame
       const messageBytes = [0x01, 0x03, 0x02, 0x12, 0x34];
       const lrc = calculateLRC(messageBytes);
-      const hexString = messageBytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('') + 
-                       lrc.toString(16).padStart(2, '0').toUpperCase();
+      const hexString =
+        messageBytes
+          .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
+          .join("") + lrc.toString(16).padStart(2, "0").toUpperCase();
       const asciiFrame = `:${hexString}\r\n`;
-      
+
       client.handleResponse(
         new Uint8Array(Array.from(asciiFrame).map((c) => c.charCodeAt(0))),
       );

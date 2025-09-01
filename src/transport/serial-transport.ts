@@ -1,16 +1,22 @@
 // Serial transport implementation using Web Serial API
 // Wraps the existing SerialManager to implement the IModbusTransport interface
 
-import { SerialManager, type SerialConfig } from "../serial.ts";
+import { EventEmitter, type SerialConfig, SerialManager } from "../serial.ts";
 import type {
   IModbusTransport,
   SerialTransportConfig,
   TransportEvents,
   TransportState,
 } from "./transport.ts";
-import { EventEmitter } from "../serial.ts";
 
-export class SerialTransport extends EventEmitter<TransportEvents> implements IModbusTransport {
+/**
+ * Serial transport implementation using Web Serial API.
+ * Wraps the existing SerialManager to implement the IModbusTransport interface.
+ */
+export class SerialTransport
+  extends EventEmitter<TransportEvents>
+  implements IModbusTransport
+{
   private serialManager: SerialManager;
   private _state: TransportState = "disconnected";
 

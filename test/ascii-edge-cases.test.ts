@@ -6,7 +6,7 @@ import { ModbusClient } from "../src/modbus.ts";
 describe("ASCII Edge Cases Analysis", () => {
   it("handles invalid hex characters", async () => {
     const client = new ModbusClient();
-    client.protocol="ascii";
+    client.protocol = "ascii";
 
     const errorSpy: Error[] = [];
     client.on("error", (error) => errorSpy.push(error));
