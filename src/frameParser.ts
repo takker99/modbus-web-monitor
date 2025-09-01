@@ -323,3 +323,71 @@ export function checkFrameCRC(
 
   return receivedCRC === calculateCRC16(messageWithoutCRC);
 }
+
+// Helper function to validate RTU frame
+export function validateRTUFrame(frame: number[]): { isValid: boolean; error?: Error } {
+  if (frame.length < 5) {
+    return { isValid: false, error: new ModbusFrameError("RTU frame too short") };
+  }
+
+  const expectedLength = getExpectedResponseLength(frame);
+  if (expectedLength === -1) {
+    return { isValid: false, error: new ModbusFrameError("Invalid function code") };
+  }
+
+  if (frame.length < expectedLength) {
+    return { isValid: false, error: new ModbusFrameError("Incomplete frame") };
+  }
+
+  if (!checkFrameCRC(frame, expectedLength)) {
+    return { isValid: false, error: new ModbusCRCError() };
+  }
+
+  return { isValid: true };
+}
+
+// Helper function to validate ASCII frame  
+export function validateASCIIFrame(frameString: string): { isValid: boolean; frame?: number[]; error?: Error } {
+  const result = parseASCIIFrame(frameString);
+  if (!result.success) {
+    return { isValid: false, error: result.error };
+  }
+
+  // Convert parsed frame back to number array for compatibility
+  const frame: number[] = [
+    result.data.slaveId,
+    result.data.functionCode,
+    ...result.data.data
+  ];
+
+  return { isValid: true, frame };
+}
+
+// Helper function to get expected response length for RTU frames
+export function getExpectedResponseLength(buffer: number[]): number {
+  if (buffer.length < 2) return -1;
+
+  const functionCode = buffer[1];
+  const isException = (functionCode & 0x80) !== 0;
+
+  if (isException) {
+    return 5; // slave + fc + exception + crc(2)
+  }
+
+  switch (functionCode) {
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+      if (buffer.length < 3) return -1;
+      return 3 + buffer[2] + 2; // slave + fc + byteCount + data + crc(2)
+    case 5:
+    case 6:
+      return 8; // slave + fc + addr(2) + value(2) + crc(2)
+    case 15:
+    case 16:
+      return 8; // slave + fc + addr(2) + qty(2) + crc(2)
+    default:
+      return -1; // Unknown function code
+  }
+}

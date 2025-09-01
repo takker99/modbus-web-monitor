@@ -36,6 +36,11 @@ export interface ModbusWriteConfig {
 // Re-export ModbusResponse for backward compatibility
 export type { ModbusResponse };
 
+// Export new transport abstraction and pure function API
+export * from "./transport/index.ts";
+export * from "./api/pure-functions.ts";
+export * from "./types/result.ts";
+
 // Event types for ModbusClient
 type ModbusClientEvents = {
   response: [ModbusResponse];
