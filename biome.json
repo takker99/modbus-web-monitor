@@ -14,13 +14,24 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["src", "test", "!**/dist", "!**/node_modules", "!**/coverage"]
+    "includes": [
+      "*.ts",
+      "src/**",
+      "test/**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/coverage"
+    ]
   },
   "formatter": {
     "formatWithErrors": false,
     "indentStyle": "space"
   },
-  "html": { "formatter": { "selfCloseVoidElements": "always" } },
+  "html": {
+    "formatter": {
+      "selfCloseVoidElements": "always"
+    }
+  },
   "linter": {
     "rules": {
       "complexity": {

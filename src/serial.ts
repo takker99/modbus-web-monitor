@@ -6,17 +6,26 @@ export interface SerialConfig {
   stopBits: 1 | 2;
 }
 
-// Event types for SerialManager
+/** Serial communication configuration types */
+export interface SerialConfig {
+  baudRate: number;
+  dataBits: 7 | 8;
+  parity: "none" | "even" | "odd";
+  stopBits: 1 | 2;
+}
+
+/** Event types emitted by SerialManager */
 type SerialManagerEvents = {
   portSelected: [SerialPort];
   connected: [];
   disconnected: [];
-  portDisconnected: []; // Unexpected disconnect (cable unplug, permission revocation)
+  /** Unexpected disconnect (cable unplug, permission revocation) */
+  portDisconnected: [];
   error: [Error];
   data: [Uint8Array];
 };
 
-// Base event emitter class
+/** Minimal strongly-typed event emitter used across the transport layer. */
 export class EventEmitter<
   T extends Record<string, unknown[]> = Record<string, unknown[]>,
 > {
@@ -52,13 +61,14 @@ export class EventEmitter<
   }
 }
 
-// Serial communication manager using Web Serial API
+/** Serial communication manager using the Web Serial API. */
 export class SerialManager extends EventEmitter<SerialManagerEvents> {
   private port: SerialPort | null = null;
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   private isConnected = false;
 
+  /** Prompt user to select a serial port. Emits `portSelected` on success. */
   async selectPort(): Promise<void> {
     console.log("SerialManager: starting port selection");
     try {
@@ -71,6 +81,10 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
     }
   }
 
+  /**
+   * Open the selected port with the provided serial configuration.
+   * On success starts background reading and exposes a writer.
+   */
   async connect(config: SerialConfig): Promise<void> {
     console.log("SerialManager: starting connection", config);
     if (!this.port) {
@@ -93,7 +107,7 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
       console.log("SerialManager: port opened");
       this.isConnected = true;
 
-      // リーダーとライターを設定
+      // Setup reader and writer if available on the port
       if (this.port.readable) {
         this.reader = this.port.readable.getReader();
         this.startReading();
@@ -101,6 +115,8 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
 
       if (this.port.writable) {
         this.writer = this.port.writable.getWriter();
+      } else {
+        this.writer = null;
       }
 
       this.emit("connected");
@@ -110,6 +126,10 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
     }
   }
 
+  /**
+   * Gracefully close reader, writer and port. Emits `disconnected` on
+   * successful teardown.
+   */
   async disconnect(): Promise<void> {
     if (!this.isConnected) {
       return;
@@ -119,12 +139,11 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
       // Mark as disconnecting to prevent unexpected disconnect events
       this.isConnected = false;
 
-      // リーダーを解放
+      // Cancel and release reader
       if (this.reader) {
         try {
           await this.reader.cancel();
         } catch (error) {
-          // Ignore errors during cancel as port may already be closed
           console.log(
             "SerialManager: Reader cancel failed (port may be closed)",
             error,
@@ -133,18 +152,16 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
         try {
           this.reader.releaseLock();
         } catch (error) {
-          // Ignore errors during releaseLock as reader may already be closed
           console.log("SerialManager: Reader releaseLock failed", error);
         }
         this.reader = null;
       }
 
-      // ライターを解放
+      // Close writer
       if (this.writer) {
         try {
           await this.writer.close();
         } catch (error) {
-          // Ignore errors during close as port may already be closed
           console.log(
             "SerialManager: Writer close failed (port may be closed)",
             error,
@@ -153,12 +170,11 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
         this.writer = null;
       }
 
-      // ポートを閉じる
+      // Close port
       if (this.port) {
         try {
           await this.port.close();
         } catch (error) {
-          // Ignore errors during port close as port may already be closed
           console.log(
             "SerialManager: Port close failed (port may be closed)",
             error,
@@ -172,6 +188,7 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
     }
   }
 
+  /** Write raw bytes to the serial port. */
   async send(data: Uint8Array): Promise<void> {
     if (!this.writer) {
       throw new Error("Serial port not open");
@@ -210,14 +227,14 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
 
         // Check if this looks like a disconnect error
         const errorMessage = (error as Error).message.toLowerCase();
-  if (
+        if (
           errorMessage.includes("device") ||
           errorMessage.includes("port") ||
           errorMessage.includes("connection") ||
           errorMessage.includes("network") ||
           errorMessage.includes("disconnected")
         ) {
-    await this.handleUnexpectedDisconnect((error as Error).message);
+          await this.handleUnexpectedDisconnect((error as Error).message);
         } else {
           this.emit(
             "error",
@@ -264,10 +281,12 @@ export class SerialManager extends EventEmitter<SerialManagerEvents> {
     this.emit("portDisconnected");
   }
 
+  /** Whether the manager currently considers the port connected. */
   get connected(): boolean {
     return this.isConnected;
   }
 
+  /** Attempt to reconnect using the existing port and provided config. */
   async reconnect(config: SerialConfig): Promise<void> {
     console.log("SerialManager: attempting reconnection");
 

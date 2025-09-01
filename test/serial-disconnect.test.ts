@@ -137,7 +137,9 @@ describe("SerialManager Disconnect Handling", () => {
 
     serialManager = new SerialManager();
     mockPort = new MockSerialPort();
-    mockNavigator.serial.requestPort.mockResolvedValue(mockPort as unknown as SerialPort);
+    mockNavigator.serial.requestPort.mockResolvedValue(
+      mockPort as unknown as SerialPort,
+    );
   });
 
   afterEach(() => {

@@ -26,7 +26,10 @@ export interface MockTransportOptions {
   autoResponses?: Map<string, Uint8Array>;
 }
 
-export class MockTransport extends EventEmitter<TransportEvents> implements IModbusTransport {
+export class MockTransport
+  extends EventEmitter<TransportEvents>
+  implements IModbusTransport
+{
   private _state: TransportState = "disconnected";
   private options: MockTransportOptions;
 
@@ -39,13 +42,13 @@ export class MockTransport extends EventEmitter<TransportEvents> implements IMod
   ) {
     super();
     this.options = {
+      autoResponses: new Map(),
       connectDelay: 0,
       disconnectDelay: 0,
+      errorMessage: "Mock transport error",
       sendDelay: 0,
       shouldFailConnect: false,
       shouldFailSend: false,
-      errorMessage: "Mock transport error",
-      autoResponses: new Map(),
       ...options,
     };
   }
@@ -66,8 +69,9 @@ export class MockTransport extends EventEmitter<TransportEvents> implements IMod
     this.setState("connecting");
 
     // Simulate connection delay
-    if (this.options.connectDelay! > 0) {
-      await this.delay(this.options.connectDelay!);
+    const connectDelay = this.options.connectDelay ?? 0;
+    if (connectDelay > 0) {
+      await this.delay(connectDelay);
     }
 
     if (this.options.shouldFailConnect) {
@@ -85,8 +89,9 @@ export class MockTransport extends EventEmitter<TransportEvents> implements IMod
     }
 
     // Simulate disconnection delay
-    if (this.options.disconnectDelay! > 0) {
-      await this.delay(this.options.disconnectDelay!);
+    const disconnectDelay = this.options.disconnectDelay ?? 0;
+    if (disconnectDelay > 0) {
+      await this.delay(disconnectDelay);
     }
 
     this.setState("disconnected");
@@ -99,8 +104,9 @@ export class MockTransport extends EventEmitter<TransportEvents> implements IMod
     }
 
     // Simulate send delay
-    if (this.options.sendDelay! > 0) {
-      await this.delay(this.options.sendDelay!);
+    const sendDelay = this.options.sendDelay ?? 0;
+    if (sendDelay > 0) {
+      await this.delay(sendDelay);
     }
 
     if (this.options.shouldFailSend) {

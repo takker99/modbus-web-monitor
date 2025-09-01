@@ -1,6 +1,8 @@
-// Unified error types for Modbus operations
+/**
+ * Unified error types and exception code mapping for Modbus operations.
+ */
 
-// Modbus exception codes as defined in the specification
+/** Modbus exception codes as defined in the specification. */
 export const MODBUS_EXCEPTION_CODES: Record<number, string> = {
   1: "Illegal function",
   2: "Illegal data address (address does not exist)",
@@ -13,7 +15,7 @@ export const MODBUS_EXCEPTION_CODES: Record<number, string> = {
   11: "Gateway target device failed to respond",
 } as const;
 
-// Base error class for Modbus-related errors
+/** Base error class for Modbus-related errors. */
 export class ModbusError extends Error {
   constructor(
     message: string,
@@ -24,7 +26,7 @@ export class ModbusError extends Error {
   }
 }
 
-// Error for Modbus exception responses (function code | 0x80)
+/** Error for Modbus exception responses (function code | 0x80). */
 export class ModbusExceptionError extends ModbusError {
   constructor(public readonly exceptionCode: number) {
     const message =
@@ -35,7 +37,7 @@ export class ModbusExceptionError extends ModbusError {
   }
 }
 
-// Error for CRC validation failures
+/** Error for CRC validation failures. */
 export class ModbusCRCError extends ModbusError {
   constructor() {
     super("CRC error");
@@ -43,7 +45,7 @@ export class ModbusCRCError extends ModbusError {
   }
 }
 
-// Error for LRC validation failures
+/** Error for LRC validation failures. */
 export class ModbusLRCError extends ModbusError {
   constructor() {
     super("LRC error");
@@ -51,7 +53,7 @@ export class ModbusLRCError extends ModbusError {
   }
 }
 
-// Error for invalid frame format
+/** Error for invalid frame format. */
 export class ModbusFrameError extends ModbusError {
   constructor(message: string) {
     super(`Frame error: ${message}`);
@@ -59,7 +61,7 @@ export class ModbusFrameError extends ModbusError {
   }
 }
 
-// Error for request timeouts
+/** Error for request timeouts. */
 export class ModbusTimeoutError extends ModbusError {
   constructor() {
     super("Request timed out");
@@ -67,7 +69,7 @@ export class ModbusTimeoutError extends ModbusError {
   }
 }
 
-// Error for concurrent request attempts
+/** Error for concurrent request attempts. */
 export class ModbusBusyError extends ModbusError {
   constructor() {
     super("Another request is in progress");

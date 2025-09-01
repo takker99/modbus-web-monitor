@@ -1,11 +1,15 @@
-// Pure functions for parsing Modbus frames and responses
+/**
+ * Pure functions for parsing Modbus frames and responses.
+ */
 
 import { calculateCRC16 } from "./crc.ts";
 import { ModbusCRCError, ModbusFrameError, ModbusLRCError } from "./errors.ts";
 import { isValidFunctionCode } from "./functionCodes.ts";
 import { calculateLRC } from "./lrc.ts";
 
-// Result type for frame parsing operations
+/**
+ * Result type for frame parsing operations.
+ */
 export type ParseResult<T> =
   | {
       success: true;
@@ -16,24 +20,39 @@ export type ParseResult<T> =
       error: Error;
     };
 
-// Parsed frame data
+/**
+ * Parsed frame shape returned by the parsers.
+ */
 export interface ParsedFrame {
+  /** Slave device identifier. */
   slaveId: number;
+  /** Function code without exception bit. */
   functionCode: number;
+  /** Raw payload bytes (for RTU this omits CRC). */
   data: number[];
+  /** Whether this frame is an exception/ error frame. */
   isException: boolean;
+  /** Optional Modbus exception code when isException is true. */
   exceptionCode?: number;
 }
 
-// Utility function to parse bit-based responses (FC01/FC02) - backwards compatibility
+/**
+ * Utility function to parse bit-based responses (FC01/FC02).
+ *
+ * Backwards-compatible helper that extracts up to `dataLength` bytes of
+ * bit-packed data starting at the standard response offset.
+ *
+ * @param responseData - Complete RTU response as a byte array.
+ * @param dataLength - Number of data bytes that hold bit-packed values.
+ * @returns Array of bit values (0 or 1) in LSB-first order per Modbus spec.
+ */
 export function parseBitResponse(
   responseData: number[],
   dataLength: number,
 ): number[] {
   const data: number[] = [];
-  // dataLength is the number of bytes containing bit data
   for (let byteIndex = 0; byteIndex < dataLength; byteIndex++) {
-    const byte = responseData[3 + byteIndex]; // Skip slave, fc, byteCount
+    const byte = responseData[3 + byteIndex];
     for (let bitIndex = 0; bitIndex < 8; bitIndex++) {
       data.push((byte >> bitIndex) & 1);
     }
@@ -41,7 +60,15 @@ export function parseBitResponse(
   return data;
 }
 
-// Utility function to parse register-based responses (FC03/FC04) - backwards compatibility
+/**
+ * Utility function to parse register-based responses (FC03/FC04).
+ *
+ * Extracts 16-bit register values from the response payload starting at the
+ * standard offset. Each register is represented as a big-endian 16-bit value.
+ *
+ * @param responseData - Complete RTU response as a byte array.
+ * @param dataLength - Number of data bytes (should be an even number).
+ */
 export function parseRegisterResponse(
   responseData: number[],
   dataLength: number,
@@ -54,8 +81,12 @@ export function parseRegisterResponse(
   return data;
 }
 
-// Modern implementations for new frame parser (pure functions)
-// Parse bit data from raw bytes
+/**
+ * Parse bit data from raw bytes (modern helper).
+ *
+ * @param rawBytes - Byte array containing packed bits (LSB-first within each byte).
+ * @param numBits - Number of bits to decode.
+ */
 export function parseBitData(rawBytes: number[], numBits: number): number[] {
   const data: number[] = [];
   for (let i = 0; i < numBits; i++) {
@@ -70,7 +101,11 @@ export function parseBitData(rawBytes: number[], numBits: number): number[] {
   return data;
 }
 
-// Parse register data from raw bytes
+/**
+ * Parse register data from raw bytes (modern helper).
+ *
+ * Interprets consecutive pairs of bytes as big-endian 16-bit register values.
+ */
 export function parseRegisterData(rawBytes: number[]): number[] {
   const data: number[] = [];
   for (let i = 0; i < rawBytes.length; i += 2) {
@@ -82,7 +117,11 @@ export function parseRegisterData(rawBytes: number[]): number[] {
   return data;
 }
 
-// Check if a byte sequence looks like a valid Modbus RTU frame start
+/**
+ * Check whether the buffer at startIndex could be the start of an RTU frame.
+ *
+ * Performs lightweight validation on slave id and function code ranges.
+ */
 export function isPlausibleFrameStart(
   buffer: number[],
   startIndex: number,
@@ -95,25 +134,33 @@ export function isPlausibleFrameStart(
   // Valid slave ID range: 1-247 (0x01-0xF7)
   if (slaveId < 1 || slaveId > 247) return false;
 
-  // Valid function codes: 1-6, 15-16, or exception responses (0x81-0x86, 0x8F, 0x90)
   const isException =
     (functionCode & 0x80) !== 0 && isValidFunctionCode(functionCode & 0x7f);
 
   return isValidFunctionCode(functionCode) || isException;
 }
 
-// Find the next plausible frame start position in buffer for resynchronization
+/**
+ * Find the next plausible RTU frame start in the buffer for resynchronization.
+ *
+ * Scans from index 1 to avoid returning the current (possibly corrupted)
+ * start position.
+ */
 export function findFrameResyncPosition(buffer: number[]): number {
-  // Start scanning from position 1 (skip current corrupted frame start)
   for (let i = 1; i < buffer.length - 1; i++) {
     if (isPlausibleFrameStart(buffer, i)) {
       return i;
     }
   }
-  return -1; // No candidate found
+  return -1;
 }
 
-// Parse RTU frame and validate CRC
+/**
+ * Parse an RTU frame from the provided buffer and validate CRC.
+ *
+ * Returns a ParseResult which contains either the parsed frame or an error
+ * describing why parsing failed.
+ */
 export function parseRTUFrame(buffer: number[]): ParseResult<ParsedFrame> {
   if (buffer.length < 5) {
     return {
@@ -126,12 +173,10 @@ export function parseRTUFrame(buffer: number[]): ParseResult<ParsedFrame> {
   const functionCode = buffer[1];
   const isException = (functionCode & 0x80) !== 0;
 
-  // Determine expected frame length
   let expectedLength: number;
   if (isException) {
     expectedLength = 5; // slave + fc + exception + crc(2)
   } else {
-    // Calculate based on function code and data
     switch (functionCode) {
       case 1:
       case 2:
@@ -169,13 +214,10 @@ export function parseRTUFrame(buffer: number[]): ParseResult<ParsedFrame> {
     };
   }
 
-  // Validate CRC
-  // checkFrameCRC returns true when CRC matches, so invert for error condition
   if (!checkFrameCRC(buffer, expectedLength)) {
     return { error: new ModbusCRCError(), success: false };
   }
 
-  // Extract data
   let data: number[];
   let exceptionCode: number | undefined;
 
@@ -205,7 +247,7 @@ export function parseRTUFrame(buffer: number[]): ParseResult<ParsedFrame> {
     data: {
       data,
       exceptionCode,
-      functionCode: functionCode & 0x7f, // Remove exception bit for consistency
+      functionCode: functionCode & 0x7f,
       isException,
       slaveId,
     },
@@ -213,9 +255,13 @@ export function parseRTUFrame(buffer: number[]): ParseResult<ParsedFrame> {
   };
 }
 
-// Parse ASCII frame and validate LRC
+/**
+ * Parse an ASCII frame string and validate LRC.
+ *
+ * The function accepts a full ASCII frame (including leading ':') and
+ * returns the parsed payload or an error on invalid format / LRC mismatch.
+ */
 export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
-  // Frame should start with ':' and contain hex pairs
   if (frameString.length < 3 || frameString[0] !== ":") {
     return {
       error: new ModbusFrameError("Invalid ASCII frame format"),
@@ -223,7 +269,6 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
     };
   }
 
-  // Remove the ':' and parse hex pairs
   const hexString = frameString.substring(1);
   if (hexString.length % 2 !== 0) {
     return {
@@ -234,12 +279,9 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
     };
   }
 
-  // Convert hex pairs to bytes
   const frameBytes: number[] = [];
   for (let i = 0; i < hexString.length; i += 2) {
     const hexPair = hexString.substring(i, i + 2);
-
-    // Validate that both characters are valid hex digits
     if (!/^[0-9A-Fa-f]{2}$/.test(hexPair)) {
       return {
         error: new ModbusFrameError(
@@ -248,12 +290,10 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
         success: false,
       };
     }
-
     const byte = parseInt(hexPair, 16);
     frameBytes.push(byte);
   }
 
-  // Need at least slave + function + LRC = 3 bytes
   if (frameBytes.length < 3) {
     return {
       error: new ModbusFrameError("ASCII frame too short"),
@@ -261,7 +301,6 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
     };
   }
 
-  // Extract LRC (last byte) and message (all but last byte)
   const receivedLRC = frameBytes[frameBytes.length - 1];
   const messageBytes = frameBytes.slice(0, -1);
   const calculatedLRC = calculateLRC(messageBytes);
@@ -287,7 +326,6 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
     exceptionCode = messageBytes[2];
     data = [];
   } else {
-    // Align extraction semantics with parseRTUFrame: omit byteCount for FC 1-4
     if (
       messageBytes.length >= 3 &&
       (functionCode & 0x7f) >= 1 &&
@@ -304,7 +342,7 @@ export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
     data: {
       data,
       exceptionCode,
-      functionCode: functionCode & 0x7f, // Remove exception bit for consistency
+      functionCode: functionCode & 0x7f,
       isException,
       slaveId,
     },
@@ -316,7 +354,6 @@ export function checkFrameCRC(
   buffer: number[],
   responseLength: number,
 ): boolean {
-  // CRC check
   const messageWithoutCRC = buffer.slice(0, responseLength - 2);
   const receivedCRC =
     (buffer[responseLength - 1] << 8) | buffer[responseLength - 2];
@@ -324,46 +361,64 @@ export function checkFrameCRC(
   return receivedCRC === calculateCRC16(messageWithoutCRC);
 }
 
-// Helper function to validate RTU frame
-export function validateRTUFrame(frame: number[]): { isValid: boolean; error?: Error } {
+/**
+ * Helper function to validate RTU frame. Returns {isValid,error?}.
+ */
+export function validateRTUFrame(frame: number[]): {
+  isValid: boolean;
+  error?: Error;
+} {
   if (frame.length < 5) {
-    return { isValid: false, error: new ModbusFrameError("RTU frame too short") };
+    return {
+      error: new ModbusFrameError("RTU frame too short"),
+      isValid: false,
+    };
   }
 
   const expectedLength = getExpectedResponseLength(frame);
   if (expectedLength === -1) {
-    return { isValid: false, error: new ModbusFrameError("Invalid function code") };
+    return {
+      error: new ModbusFrameError("Invalid function code"),
+      isValid: false,
+    };
   }
 
   if (frame.length < expectedLength) {
-    return { isValid: false, error: new ModbusFrameError("Incomplete frame") };
+    return { error: new ModbusFrameError("Incomplete frame"), isValid: false };
   }
 
   if (!checkFrameCRC(frame, expectedLength)) {
-    return { isValid: false, error: new ModbusCRCError() };
+    return { error: new ModbusCRCError(), isValid: false };
   }
 
   return { isValid: true };
 }
 
-// Helper function to validate ASCII frame  
-export function validateASCIIFrame(frameString: string): { isValid: boolean; frame?: number[]; error?: Error } {
+/**
+ * Helper function to validate ASCII frame and return parsed number array.
+ */
+export function validateASCIIFrame(frameString: string): {
+  isValid: boolean;
+  frame?: number[];
+  error?: Error;
+} {
   const result = parseASCIIFrame(frameString);
   if (!result.success) {
-    return { isValid: false, error: result.error };
+    return { error: result.error, isValid: false };
   }
 
-  // Convert parsed frame back to number array for compatibility
   const frame: number[] = [
     result.data.slaveId,
     result.data.functionCode,
-    ...result.data.data
+    ...result.data.data,
   ];
 
-  return { isValid: true, frame };
+  return { frame, isValid: true };
 }
 
-// Helper function to get expected response length for RTU frames
+/**
+ * Helper function to get expected response length for RTU frames.
+ */
 export function getExpectedResponseLength(buffer: number[]): number {
   if (buffer.length < 2) return -1;
 

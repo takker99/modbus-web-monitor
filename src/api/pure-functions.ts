@@ -1,20 +1,20 @@
 // Pure function API for Modbus operations
 // Provides a functional interface that works directly with transports
 
-import { buildReadRequest, buildWriteRequest } from "../frameBuilder.ts";
-import { 
-  parseRegisterResponse, 
-  parseBitResponse, 
-  validateRTUFrame, 
-  validateASCIIFrame,
-  getExpectedResponseLength 
-} from "../frameParser.ts";
 import { ModbusExceptionError } from "../errors.ts";
+import { buildReadRequest, buildWriteRequest } from "../frameBuilder.ts";
+import {
+  getExpectedResponseLength,
+  parseBitResponse,
+  parseRegisterResponse,
+  validateASCIIFrame,
+  validateRTUFrame,
+} from "../frameParser.ts";
+import { FUNCTION_CODE_LABELS, isValidFunctionCode } from "../functionCodes.ts";
+import type { ModbusResponse } from "../modbus-base.ts";
 import type { IModbusTransport } from "../transport/transport.ts";
 import type { Result } from "../types/result.ts";
-import { ok, err } from "../types/result.ts";
-import type { ModbusResponse } from "../modbus-base.ts";
-import { FUNCTION_CODE_LABELS, isValidFunctionCode } from "../functionCodes.ts";
+import { err, ok } from "../types/result.ts";
 
 // Request configuration types
 export interface ReadRequest {
@@ -45,12 +45,12 @@ export async function readCoils(
   options: RequestOptions = {},
 ): Promise<Result<ModbusResponse, Error>> {
   const request: ReadRequest = {
-    unitId,
-    functionCode: 1,
     address,
+    functionCode: 1,
     quantity,
+    unitId,
   };
-  
+
   return await executeReadRequest(transport, request, options);
 }
 
@@ -63,12 +63,12 @@ export async function readDiscreteInputs(
   options: RequestOptions = {},
 ): Promise<Result<ModbusResponse, Error>> {
   const request: ReadRequest = {
-    unitId,
-    functionCode: 2,
     address,
+    functionCode: 2,
     quantity,
+    unitId,
   };
-  
+
   return await executeReadRequest(transport, request, options);
 }
 
@@ -81,12 +81,12 @@ export async function readHoldingRegisters(
   options: RequestOptions = {},
 ): Promise<Result<ModbusResponse, Error>> {
   const request: ReadRequest = {
-    unitId,
-    functionCode: 3,
     address,
+    functionCode: 3,
     quantity,
+    unitId,
   };
-  
+
   return await executeReadRequest(transport, request, options);
 }
 
@@ -99,12 +99,12 @@ export async function readInputRegisters(
   options: RequestOptions = {},
 ): Promise<Result<ModbusResponse, Error>> {
   const request: ReadRequest = {
-    unitId,
-    functionCode: 4,
     address,
+    functionCode: 4,
     quantity,
+    unitId,
   };
-  
+
   return await executeReadRequest(transport, request, options);
 }
 
@@ -117,12 +117,12 @@ export async function writeSingleCoil(
   options: RequestOptions = {},
 ): Promise<Result<void, Error>> {
   const request: WriteRequest = {
-    unitId,
-    functionCode: 5,
     address,
+    functionCode: 5,
+    unitId,
     value: value ? 1 : 0,
   };
-  
+
   return await executeWriteRequest(transport, request, options);
 }
 
@@ -135,12 +135,12 @@ export async function writeSingleRegister(
   options: RequestOptions = {},
 ): Promise<Result<void, Error>> {
   const request: WriteRequest = {
-    unitId,
-    functionCode: 6,
     address,
+    functionCode: 6,
+    unitId,
     value,
   };
-  
+
   return await executeWriteRequest(transport, request, options);
 }
 
@@ -153,12 +153,12 @@ export async function writeMultipleCoils(
   options: RequestOptions = {},
 ): Promise<Result<void, Error>> {
   const request: WriteRequest = {
-    unitId,
-    functionCode: 15,
     address,
-    value: values.map(v => v ? 1 : 0),
+    functionCode: 15,
+    unitId,
+    value: values.map((v) => (v ? 1 : 0)),
   };
-  
+
   return await executeWriteRequest(transport, request, options);
 }
 
@@ -171,12 +171,12 @@ export async function writeMultipleRegisters(
   options: RequestOptions = {},
 ): Promise<Result<void, Error>> {
   const request: WriteRequest = {
-    unitId,
-    functionCode: 16,
     address,
+    functionCode: 16,
+    unitId,
     value: values,
   };
-  
+
   return await executeWriteRequest(transport, request, options);
 }
 
@@ -196,10 +196,10 @@ async function executeReadRequest(
   try {
     // Build request frame
     const requestConfig = {
-      slaveId: request.unitId,
       functionCode: request.functionCode,
-      startAddress: request.address,
       quantity: request.quantity,
+      slaveId: request.unitId,
+      startAddress: request.address,
     };
     const requestFrame = buildReadRequest(requestConfig, protocol);
 
@@ -232,13 +232,13 @@ async function executeReadRequest(
     }
 
     const response: ModbusResponse = {
-      slaveId: request.unitId,
+      address: request.address,
+      data,
       functionCode: request.functionCode,
       functionCodeLabel: isValidFunctionCode(request.functionCode)
         ? FUNCTION_CODE_LABELS[request.functionCode]
         : `Unknown (${request.functionCode})`,
-      data,
-      address: request.address,
+      slaveId: request.unitId,
       timestamp: new Date(),
     };
 
@@ -264,9 +264,9 @@ async function executeWriteRequest(
   try {
     // Build request frame
     const requestConfig = {
-      slaveId: request.unitId,
-      functionCode: request.functionCode,
       address: request.address,
+      functionCode: request.functionCode,
+      slaveId: request.unitId,
       value: request.value,
     };
     const requestFrame = buildWriteRequest(requestConfig, protocol);
@@ -306,7 +306,7 @@ async function sendRequestAndWaitForResponse(
       resolve(err(new Error("Request timeout")));
     }, timeout);
 
-    let buffer: number[] = [];
+    const buffer: number[] = [];
     let asciiBuffer = "";
 
     const onData = (data: Uint8Array) => {
@@ -337,9 +337,11 @@ async function sendRequestAndWaitForResponse(
         const functionCode = buffer[1];
 
         // Check if this frame matches our expected response
-        const isMatch = unitId === expectedUnitId && 
-          (functionCode === expectedFunctionCode || 
-           (functionCode & 0x80 && (functionCode & 0x7f) === expectedFunctionCode));
+        const isMatch =
+          unitId === expectedUnitId &&
+          (functionCode === expectedFunctionCode ||
+            (functionCode & 0x80 &&
+              (functionCode & 0x7f) === expectedFunctionCode));
 
         if (!isMatch) {
           buffer.shift(); // Remove first byte and try again
@@ -367,7 +369,7 @@ async function sendRequestAndWaitForResponse(
         if (buffer.length >= expectedLength) {
           const frame = buffer.slice(0, expectedLength);
           const validation = validateRTUFrame(frame);
-          
+
           if (validation.isValid) {
             cleanup();
             resolve(ok(new Uint8Array(frame)));
@@ -402,9 +404,11 @@ async function sendRequestAndWaitForResponse(
           const functionCode = validation.frame[1];
 
           // Check if this frame matches our expected response
-          const isMatch = unitId === expectedUnitId && 
-            (functionCode === expectedFunctionCode || 
-             (functionCode & 0x80 && (functionCode & 0x7f) === expectedFunctionCode));
+          const isMatch =
+            unitId === expectedUnitId &&
+            (functionCode === expectedFunctionCode ||
+              (functionCode & 0x80 &&
+                (functionCode & 0x7f) === expectedFunctionCode));
 
           if (isMatch) {
             // Check for exception response

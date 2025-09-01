@@ -1,12 +1,29 @@
-// Pure functions for building Modbus frames (RTU and ASCII)
+/**
+ * Pure functions for building Modbus frames (RTU and ASCII).
+ *
+ * These helpers produce the serialized request bytes and append the
+ * appropriate checksum depending on the chosen protocol.
+ */
 
 import { calculateCRC16 } from "./crc.ts";
 import { calculateLRC } from "./lrc.ts";
 import type { ModbusReadConfig, ModbusWriteConfig } from "./modbus.ts";
 
+/**
+ * Supported Modbus transport protocols used by the frame builders.
+ */
 export type ModbusProtocol = "rtu" | "ascii";
 
-// Build a Modbus read request frame
+/**
+ * Build a Modbus read request frame.
+ *
+ * Constructs the PDU for read requests (start address + quantity) and
+ * delegates framing (checksum/ASCII conversion) to {@link buildFrame}.
+ *
+ * @param config - Read request configuration object.
+ * @param protocol - Target transport protocol, defaults to "rtu".
+ * @returns Serialized request bytes for the target protocol.
+ */
 export function buildReadRequest(
   config: ModbusReadConfig,
   protocol: ModbusProtocol = "rtu",
@@ -23,7 +40,18 @@ export function buildReadRequest(
   return buildFrame(request, protocol);
 }
 
-// Build a Modbus write request frame
+/**
+ * Build a Modbus write request frame.
+ *
+ * Handles FC5/FC6/FC15/FC16 and validates the `config.value` shape for
+ * multi-write requests.
+ *
+ * @param config - Write request configuration object.
+ * @param protocol - Target transport protocol, defaults to "rtu".
+ * @returns Serialized request bytes for the target protocol.
+ * @throws Error when the request configuration is invalid for the
+ *         selected function code.
+ */
 export function buildWriteRequest(
   config: ModbusWriteConfig,
   protocol: ModbusProtocol = "rtu",
@@ -32,7 +60,6 @@ export function buildWriteRequest(
 
   switch (config.functionCode) {
     case 5: {
-      // Write single coil
       const value = Array.isArray(config.value)
         ? config.value[0]
         : config.value;
@@ -47,7 +74,6 @@ export function buildWriteRequest(
       break;
     }
     case 6: {
-      // Write single register
       const value = Array.isArray(config.value)
         ? config.value[0]
         : config.value;
@@ -62,7 +88,7 @@ export function buildWriteRequest(
       break;
     }
     case 15: {
-      // Write multiple coils (FC15)
+      // Write multiple coils (FC15) — value must be an array of bits
       if (!Array.isArray(config.value)) {
         throw new Error("FC15 requires value to be an array of bits (0/1)");
       }
@@ -87,7 +113,7 @@ export function buildWriteRequest(
       break;
     }
     case 16: {
-      // Write multiple registers (FC16)
+      // Write multiple registers (FC16) — value must be an array of registers
       if (!Array.isArray(config.value)) {
         throw new Error(
           "FC16 requires value to be an array of register values",
@@ -118,23 +144,32 @@ export function buildWriteRequest(
   return buildFrame(request, protocol);
 }
 
-// Build a complete frame with checksum for the specified protocol
+/**
+ * Build a complete frame with checksum for the specified protocol.
+ *
+ * For RTU the CRC16 is appended as two bytes (low, high). For ASCII the
+ * LRC is appended and the whole payload is converted to an ASCII colon
+ * framed string terminated with CRLF.
+ *
+ * @param request - Array of bytes representing the PDU (slave + function + data).
+ * @param protocol - Target transport protocol.
+ * @returns The serialized frame as a Uint8Array suitable for sending.
+ */
 function buildFrame(request: number[], protocol: ModbusProtocol): Uint8Array {
   if (protocol === "rtu") {
     const crcValue = calculateCRC16(request);
     request.push(crcValue & 0xff, (crcValue >> 8) & 0xff);
     return new Uint8Array(request);
   }
-  // ASCII mode: format as :AABBCC...DDLR\r\n
+
+  // ASCII mode: compute LRC and convert payload to ASCII hex with ':' prefix.
   const lrcValue = calculateLRC(request);
   request.push(lrcValue);
 
-  // Convert to ASCII hex format
   const hexString = request
     .map((byte) => byte.toString(16).padStart(2, "0").toUpperCase())
     .join("");
 
-  // Create ASCII frame: : + hex data + \r\n
   const asciiFrame = `:${hexString}\r\n`;
   return new Uint8Array(Array.from(asciiFrame).map((c) => c.charCodeAt(0)));
 }

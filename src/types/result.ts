@@ -15,11 +15,11 @@ export interface Err<E> {
 
 // Constructors
 export function ok<T>(data: T): Ok<T> {
-  return { success: true, data };
+  return { data, success: true };
 }
 
 export function err<E>(error: E): Err<E> {
-  return { success: false, error };
+  return { error, success: false };
 }
 
 // Type guards
@@ -78,7 +78,9 @@ export async function fromPromise<T>(
 
 // Convert Result<T, E> to Promise<T>
 export function toPromise<T, E>(result: Result<T, E>): Promise<T> {
-  return isOk(result) ? Promise.resolve(result.data) : Promise.reject(result.error);
+  return isOk(result)
+    ? Promise.resolve(result.data)
+    : Promise.reject(result.error);
 }
 
 // Combine multiple results
@@ -86,14 +88,14 @@ export function combine<T extends readonly unknown[], E>(
   results: { [K in keyof T]: Result<T[K], E> },
 ): Result<T, E> {
   const values: unknown[] = [];
-  
+
   for (const result of results) {
     if (isErr(result)) {
       return result;
     }
     values.push(result.data);
   }
-  
+
   return ok(values as unknown as T);
 }
 
@@ -105,7 +107,7 @@ export async function mapAsync<T, U, E>(
   if (isErr(result)) {
     return result;
   }
-  
+
   try {
     const data = await fn(result.data);
     return ok(data);

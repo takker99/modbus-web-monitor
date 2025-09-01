@@ -30,14 +30,18 @@ export interface MockTransportConfig {
   name?: string;
 }
 
-export type TransportConfig = 
-  | SerialTransportConfig 
-  | TcpTransportConfig 
-  | WebSocketTransportConfig 
+export type TransportConfig =
+  | SerialTransportConfig
+  | TcpTransportConfig
+  | WebSocketTransportConfig
   | MockTransportConfig;
 
 // Transport connection state
-export type TransportState = "disconnected" | "connecting" | "connected" | "error";
+export type TransportState =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "error";
 
 // Transport event types
 export interface TransportEvents extends Record<string, unknown[]> {
@@ -63,9 +67,18 @@ export interface IModbusTransport extends EventEmitter<TransportEvents> {
   reconnect?(): Promise<void>;
 
   // Event emitter methods (for compatibility)
-  on<K extends keyof TransportEvents>(event: K, listener: (...args: TransportEvents[K]) => void): void;
-  off<K extends keyof TransportEvents>(event: K, listener: (...args: TransportEvents[K]) => void): void;
-  emit<K extends keyof TransportEvents>(event: K, ...args: TransportEvents[K]): void;
+  on<K extends keyof TransportEvents>(
+    event: K,
+    listener: (...args: TransportEvents[K]) => void,
+  ): void;
+  off<K extends keyof TransportEvents>(
+    event: K,
+    listener: (...args: TransportEvents[K]) => void,
+  ): void;
+  emit<K extends keyof TransportEvents>(
+    event: K,
+    ...args: TransportEvents[K]
+  ): void;
 }
 
 // Transport factory function type
@@ -74,25 +87,25 @@ export type TransportFactory<T extends TransportConfig = TransportConfig> = (
 ) => IModbusTransport;
 
 // Registry for transport factories
-export class TransportRegistry {
-  private static factories = new Map<string, TransportFactory>();
+// Registry implemented as module-scoped map + exported helper functions.
+const factories = new Map<string, TransportFactory>();
 
-  static register<T extends TransportConfig>(
-    type: T["type"],
-    factory: TransportFactory<T>,
-  ): void {
-    this.factories.set(type, factory as TransportFactory);
-  }
-
-  static create(config: TransportConfig): IModbusTransport {
-    const factory = this.factories.get(config.type);
+export const TransportRegistry = {
+  create(config: TransportConfig): IModbusTransport {
+    const factory = factories.get(config.type);
     if (!factory) {
       throw new Error(`Unknown transport type: ${config.type}`);
     }
     return factory(config);
-  }
+  },
 
-  static getRegisteredTypes(): string[] {
-    return Array.from(this.factories.keys());
-  }
-}
+  getRegisteredTypes(): string[] {
+    return Array.from(factories.keys());
+  },
+  register<T extends TransportConfig>(
+    type: T["type"],
+    factory: TransportFactory<T>,
+  ) {
+    factories.set(type, factory as TransportFactory);
+  },
+} as const;

@@ -1,24 +1,25 @@
-// New modular approach with protocol-specific classes
+/**
+ * High-level Modbus client entry points and backward-compatible exports.
+ */
 import type { ModbusProtocol } from "./frameBuilder.ts";
-import type {
-  ReadFunctionCode,
-  WriteFunctionCode,
-} from "./functionCodes.ts";
+import type { ReadFunctionCode, WriteFunctionCode } from "./functionCodes.ts";
 import { ModbusASCIIClient } from "./modbus-ascii.ts";
 import type {
   ModbusReadConfig as BaseModbusReadConfig,
-  ModbusResponse,
   ModbusWriteConfig as BaseModbusWriteConfig,
+  ModbusResponse,
 } from "./modbus-base.ts";
 import { ModbusRTUClient } from "./modbus-rtu.ts";
 import { EventEmitter } from "./serial.ts";
 
-// Export protocol-specific clients for tree-shaking
-export { ModbusRTUClient } from "./modbus-rtu.ts";
+/** Export protocol-specific clients for tree-shaking. */
 export { ModbusASCIIClient } from "./modbus-ascii.ts";
 export { ModbusClientBase } from "./modbus-base.ts";
+export { ModbusRTUClient } from "./modbus-rtu.ts";
 
-// Re-export types with the original function code types for backward compatibility
+/**
+ * Re-exported read config compatible with older public API.
+ */
 export interface ModbusReadConfig {
   slaveId: number;
   functionCode: ReadFunctionCode;
@@ -26,6 +27,9 @@ export interface ModbusReadConfig {
   quantity: number;
 }
 
+/**
+ * Re-exported write config compatible with older public API.
+ */
 export interface ModbusWriteConfig {
   slaveId: number;
   functionCode: WriteFunctionCode;
@@ -33,22 +37,25 @@ export interface ModbusWriteConfig {
   value: number | number[];
 }
 
-// Re-export ModbusResponse for backward compatibility
+// Re-export ModbusResponse for backward compatibility.
 export type { ModbusResponse };
 
-// Export new transport abstraction and pure function API
-export * from "./transport/index.ts";
+// Export transport and pure-function APIs.
 export * from "./api/pure-functions.ts";
+export * from "./transport/index.ts";
 export * from "./types/result.ts";
 
-// Event types for ModbusClient
 type ModbusClientEvents = {
   response: [ModbusResponse];
   error: [Error];
   request: [Uint8Array];
 };
 
-// Backward-compatible ModbusClient that delegates to protocol-specific implementations
+/**
+ * Backward-compatible ModbusClient that delegates to protocol-specific
+ * implementations (RTU or ASCII). Events from the underlying clients are
+ * forwarded to this wrapper instance.
+ */
 export class ModbusClient extends EventEmitter<ModbusClientEvents> {
   #protocol: ModbusProtocol = "rtu";
   #rtuClient: ModbusRTUClient;
@@ -112,11 +119,11 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
       client.on("response", (response: ModbusResponse) => {
         this.emit("response", response);
       });
-      
+
       client.on("error", (error: Error) => {
         this.emit("error", error);
       });
-      
+
       client.on("request", (data: Uint8Array) => {
         this.emit("request", data);
       });
