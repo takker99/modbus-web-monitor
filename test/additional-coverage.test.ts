@@ -49,13 +49,25 @@ class FakeSerialPort {
 
 type RequestPortFn = () => Promise<unknown>;
 function setNavigatorSerial(requestPortImpl: RequestPortFn) {
-  (
-    globalThis as unknown as {
-      navigator: { serial: { requestPort: RequestPortFn } };
-    }
-  ).navigator = {
-    serial: { requestPort: requestPortImpl },
+  const g = globalThis as unknown as {
+    navigator?: { serial?: { requestPort?: RequestPortFn } };
   };
+  // Node.js v22 では navigator が getter で再代入不可の場合があるため再代入せずプロパティを差し替える
+  if (!g.navigator) {
+    // lazily define navigator if not present
+    Object.defineProperty(g, "navigator", {
+      configurable: true,
+      enumerable: true,
+      value: {},
+      writable: true,
+    });
+  }
+  const nav = g.navigator as { serial?: { requestPort?: RequestPortFn } };
+  if (!nav.serial) {
+    nav.serial = { requestPort: requestPortImpl };
+  } else {
+    nav.serial.requestPort = requestPortImpl;
+  }
 }
 
 describe("SerialManager negative paths", () => {
