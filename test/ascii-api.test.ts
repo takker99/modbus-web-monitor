@@ -2,7 +2,7 @@ import { isErr, isOk, unwrapErr, unwrapOk } from "option-t/plain_result";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as ascii from "../src/ascii.ts";
 import { ModbusExceptionError } from "../src/errors.ts";
-import { buildReadRequest, buildWriteRequest } from "../src/frameBuilder.ts";
+import { toASCIIFrame, toReadPDU, toWritePDU } from "../src/frameBuilder.ts";
 import { calculateLRC } from "../src/lrc.ts";
 import { MockTransport } from "../src/transport/mock-transport.ts";
 
@@ -31,9 +31,13 @@ describe("ASCII API full coverage", () => {
   });
 
   it("readHoldingRegisters success", async () => {
-    buildReadRequest(
-      { address: 0x0002, functionCode: 3, quantity: 2, slaveId: 1 },
-      "ascii",
+    toASCIIFrame(
+      toReadPDU({
+        address: 0x0002,
+        functionCode: 3,
+        quantity: 2,
+        slaveId: 1,
+      }),
     );
     // Response: slave 1, fc3, byteCount 4, registers 0x0011 0x2233
     const payload = [1, 3, 4, 0x00, 0x11, 0x22, 0x33];
@@ -45,9 +49,13 @@ describe("ASCII API full coverage", () => {
   });
 
   it("readCoils success (bits)", async () => {
-    buildReadRequest(
-      { address: 0x0000, functionCode: 1, quantity: 10, slaveId: 1 },
-      "ascii",
+    toASCIIFrame(
+      toReadPDU({
+        address: 0x0000,
+        functionCode: 1,
+        quantity: 10,
+        slaveId: 1,
+      }),
     );
     // byteCount = 2 (at least to hold 10 bits). Provide pattern 0b1010_1100, 0b00000011
     const payload = [1, 1, 2, 0b11001010, 0b00000011];
@@ -63,9 +71,13 @@ describe("ASCII API full coverage", () => {
   });
 
   it("writeSingleRegister success", async () => {
-    buildWriteRequest(
-      { address: 0x0020, functionCode: 6, slaveId: 1, value: 0x1234 },
-      "ascii",
+    toASCIIFrame(
+      toWritePDU({
+        address: 0x0020,
+        functionCode: 6,
+        slaveId: 1,
+        value: 0x1234,
+      }),
     );
     // Echo style response for FC06: slave, fc, addr hi, addr lo, value hi, value lo
     const payload = [1, 6, 0x00, 0x20, 0x12, 0x34];
@@ -75,14 +87,13 @@ describe("ASCII API full coverage", () => {
   });
 
   it("writeMultipleRegisters success", async () => {
-    buildWriteRequest(
-      {
+    toASCIIFrame(
+      toWritePDU({
         address: 0x0100,
         functionCode: 16,
         slaveId: 1,
         value: [0x1111, 0x2222],
-      },
-      "ascii",
+      }),
     );
     // Response: slave, fc, addr hi, addr lo, qty hi, qty lo
     const payload = [1, 16, 0x01, 0x00, 0x00, 0x02];
@@ -97,9 +108,13 @@ describe("ASCII API full coverage", () => {
   });
 
   it("exception frame", async () => {
-    buildReadRequest(
-      { address: 0x0000, functionCode: 3, quantity: 1, slaveId: 1 },
-      "ascii",
+    toASCIIFrame(
+      toReadPDU({
+        address: 0x0000,
+        functionCode: 3,
+        quantity: 1,
+        slaveId: 1,
+      }),
     );
     // Exception: functionCode | 0x80, exception code 2 (Illegal Data Address). Payload: slave, fc|0x80, exCode
     const payload = [1, 3 | 0x80, 2];

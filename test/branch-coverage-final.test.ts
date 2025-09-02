@@ -1,18 +1,17 @@
 import { isOk, unwrapErr } from "option-t/plain_result";
 import { describe, expect, it } from "vitest";
-import { buildWriteRequest } from "../src/frameBuilder.ts";
+import { toRTUFrame, toWritePDU } from "../src/frameBuilder.ts";
 import { parseRTUFrame, validateRTUFrame } from "../src/frameParser.ts";
 
 describe("Additional branch coverage final", () => {
   it("frameBuilder FC15 all-zero coils covers else branch", () => {
-    const frame = buildWriteRequest(
-      {
+    const frame = toRTUFrame(
+      toWritePDU({
         address: 0,
         functionCode: 15,
         slaveId: 1,
-        value: Array(9).fill(0), // 9 bits => 2 bytes, all zero so inner if(bit) never taken
-      },
-      "rtu",
+        value: Array(9).fill(0),
+      }),
     );
     // Structure: id,fc,addrHi,addrLo,qtyHi,qtyLo,byteCount,<coilBytes>,crcLo,crcHi
     // qty=9 -> qtyHi=0, qtyLo=9, byteCount=2, coil bytes both zero

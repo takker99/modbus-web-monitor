@@ -2,7 +2,12 @@ import { isErr, unwrapErr, unwrapOk } from "option-t/plain_result";
 import { useCallback, useRef, useState } from "preact/hooks";
 import { read as asciiRead, write as asciiWrite } from "../ascii.ts";
 import type { ModbusProtocol } from "../frameBuilder.ts";
-import { buildReadRequest, buildWriteRequest } from "../frameBuilder.ts";
+import {
+  toASCIIFrame,
+  toReadPDU,
+  toRTUFrame,
+  toWritePDU,
+} from "../frameBuilder.ts";
 import type { ReadFunctionCode, WriteFunctionCode } from "../functionCodes.ts";
 import type { ModbusResponse, ReadRequest, WriteRequest } from "../modbus.ts";
 import { read as rtuRead, write as rtuWrite } from "../rtu.ts";
@@ -133,7 +138,8 @@ export function App() {
     const request: ReadRequest = { ...readConfig, slaveId };
     // 低レベル送信フレームを構築しログ (RTU/ASCII 切替)
     try {
-      const frame = buildReadRequest(request, protocol);
+      const pdu = toReadPDU(request);
+      const frame = protocol === "rtu" ? toRTUFrame(pdu) : toASCIIFrame(pdu);
       const hex = Array.from(frame)
         .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
         .join(" ");
@@ -187,15 +193,13 @@ export function App() {
       }
       // 低レベル送信フレームを構築しログ
       try {
-        const frame = buildWriteRequest(
-          {
-            address: writeConfig.address,
-            functionCode: fc,
-            slaveId,
-            value: value,
-          },
-          protocol,
-        );
+        const pdu = toWritePDU({
+          address: writeConfig.address,
+          functionCode: fc,
+          slaveId,
+          value: value,
+        });
+        const frame = protocol === "rtu" ? toRTUFrame(pdu) : toASCIIFrame(pdu);
         const hex = Array.from(frame)
           .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
           .join(" ");

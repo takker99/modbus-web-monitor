@@ -9,7 +9,7 @@ import {
   unwrapOk,
 } from "option-t/plain_result";
 import { ModbusExceptionError } from "./errors.ts";
-import { buildReadRequest, buildWriteRequest } from "./frameBuilder.ts";
+import { toReadPDU, toRTUFrame, toWritePDU } from "./frameBuilder.ts";
 import {
   getExpectedResponseLength,
   parseBitResponse,
@@ -153,7 +153,7 @@ export async function read(
   if (!transport.connected)
     return createErr(new Error("Transport not connected"));
   try {
-    const requestFrame = buildReadRequest(request, "rtu");
+    const requestFrame = toRTUFrame(toReadPDU(request));
     const responseResult = await send(
       transport,
       requestFrame,
@@ -190,7 +190,7 @@ export async function write(
   if (!transport.connected)
     return createErr(new Error("Transport not connected"));
   try {
-    const requestFrame = buildWriteRequest(request, "rtu");
+    const requestFrame = toRTUFrame(toWritePDU(request));
     const responseResult = await send(
       transport,
       requestFrame,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ModbusExceptionError } from "../src/errors.ts";
-import { buildWriteRequest } from "../src/frameBuilder.ts";
+import { toWritePDU } from "../src/frameBuilder.ts";
 import type { WriteRequest } from "../src/modbus.ts";
 
 // Helper to build a minimal write config
@@ -25,17 +25,20 @@ describe("errors.ts additional branches", () => {
 describe("frameBuilder write error branches", () => {
   it("FC15 requires array", () => {
     const cfg = writeCfg({ functionCode: 15, value: 1 });
-    expect(() => buildWriteRequest(cfg)).toThrow(/FC15 requires value/);
+    // biome-ignore lint/suspicious/noExplicitAny: intentional for invalid input test
+    expect(() => toWritePDU(cfg as any)).toThrow(/FC15 requires value/);
   });
 
   it("FC16 requires array", () => {
     const cfg = writeCfg({ address: 0x10, functionCode: 16, value: 1 });
-    expect(() => buildWriteRequest(cfg)).toThrow(/FC16 requires value/);
+    // biome-ignore lint/suspicious/noExplicitAny: intentional for invalid input test
+    expect(() => toWritePDU(cfg as any)).toThrow(/FC16 requires value/);
   });
 
   it("unsupported function code throws", () => {
     const cfg = writeCfg({ functionCode: 99 as unknown as 5 });
-    expect(() => buildWriteRequest(cfg)).toThrow(/Unsupported function code/);
+    // biome-ignore lint/suspicious/noExplicitAny: intentional for invalid input test
+    expect(() => toWritePDU(cfg as any)).toThrow(/Unsupported function code/);
   });
 });
 

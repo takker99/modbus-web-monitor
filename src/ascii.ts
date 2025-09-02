@@ -10,7 +10,7 @@ import {
   unwrapOk,
 } from "option-t/plain_result";
 import { ModbusExceptionError } from "./errors.ts";
-import { buildReadRequest, buildWriteRequest } from "./frameBuilder.ts";
+import { toASCIIFrame, toReadPDU, toWritePDU } from "./frameBuilder.ts";
 import {
   parseBitData,
   parseRegisterData,
@@ -153,7 +153,7 @@ export async function read(
   if (!transport.connected)
     return createErr(new Error("Transport not connected"));
   try {
-    const requestFrame = buildReadRequest(request, "ascii");
+    const requestFrame = toASCIIFrame(toReadPDU(request));
     const responseResult = await send(
       transport,
       requestFrame,
@@ -188,7 +188,7 @@ export async function write(
   if (!transport.connected)
     return createErr(new Error("Transport not connected"));
   try {
-    const requestFrame = buildWriteRequest(request, "ascii");
+    const requestFrame = toASCIIFrame(toWritePDU(request));
     const responseResult = await send(
       transport,
       requestFrame,
