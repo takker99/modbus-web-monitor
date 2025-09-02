@@ -1,71 +1,37 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
-import { type SerialConfig, SerialManager } from "../../serial.ts";
-
-// For test/mocking we expose the shape required; a mock can implement these members.
-export interface SerialManagerLike {
-  on: (ev: string, listener: (...args: unknown[]) => void) => void;
-  off: (ev: string, listener: (...args: unknown[]) => void) => void;
-  selectPort: () => Promise<void>;
-  connect: (c: SerialConfig) => Promise<void>;
-  disconnect: () => Promise<void>;
-  reconnect: (c: SerialConfig) => Promise<void>;
-}
+import { useCallback, useRef, useState } from "preact/hooks";
+import { SerialTransport } from "../../transport/serial-transport.ts";
 
 export interface UseSerialOptions {
-  manager?: SerialManager | SerialManagerLike; // DI for testing
+  requestPort?: (options?: SerialPortRequestOptions) => Promise<SerialPort>;
 }
 
 export interface UseSerialResult {
-  manager: SerialManager | SerialManagerLike;
-  connected: boolean;
-  portSelected: boolean;
-  portDisconnected: boolean;
+  transport?: SerialTransport;
   selectPort: () => Promise<void>;
-  connect: (config: SerialConfig) => Promise<void>;
-  disconnect: () => Promise<void>;
-  reconnect: (config: SerialConfig) => Promise<void>;
 }
 
-export function useSerial(opts: UseSerialOptions = {}): UseSerialResult {
-  const manager = useMemo(
-    () => opts.manager ?? new SerialManager(),
-    [opts.manager],
-  );
-  const [connected, setConnected] = useState(false);
-  const [portSelected, setPortSelected] = useState(false);
-  const [portDisconnected, setPortDisconnected] = useState(false);
+export function useSerial(
+  config: SerialOptions,
+  options?: UseSerialOptions,
+): UseSerialResult {
+  const [transport, setTransport] = useState<SerialTransport>();
+  const disposeRef = useRef<() => Promise<void>>(async () => {});
 
-  useEffect(() => {
-    const onPortSelected = () => setPortSelected(true);
-    const onConnected = () => {
-      setConnected(true);
-      setPortDisconnected(false);
+  const selectPort = useCallback(async () => {
+    const previousDispose = disposeRef.current;
+    const chain = previousDispose()
+      .then(() => (options?.requestPort ?? navigator.serial.requestPort)())
+      .then((port) => {
+        const t = new SerialTransport({ ...config, type: "serial" }, port);
+        setTransport(t); // schedule render with new transport
+        return t;
+      });
+    disposeRef.current = async () => {
+      const t = await chain;
+      await t.disconnect();
     };
-    const onDisconnected = () => setConnected(false);
-    const onPortDisconnected = () => {
-      setConnected(false);
-      setPortDisconnected(true);
-    };
-    manager.on("portSelected", onPortSelected);
-    manager.on("connected", onConnected);
-    manager.on("disconnected", onDisconnected);
-    manager.on("portDisconnected", onPortDisconnected);
-    return () => {
-      manager.off("portSelected", onPortSelected);
-      manager.off("connected", onConnected);
-      manager.off("disconnected", onDisconnected);
-      manager.off("portDisconnected", onPortDisconnected);
-    };
-  }, [manager]);
+    await chain;
+  }, [options?.requestPort]);
 
-  return {
-    connect: (c: SerialConfig) => manager.connect(c),
-    connected,
-    disconnect: () => manager.disconnect(),
-    manager,
-    portDisconnected,
-    portSelected,
-    reconnect: (c: SerialConfig) => manager.reconnect(c),
-    selectPort: () => manager.selectPort(),
-  };
+  return { selectPort, transport };
 }

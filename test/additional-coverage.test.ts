@@ -1,8 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ModbusExceptionError } from "../src/errors.ts";
 import { buildWriteRequest } from "../src/frameBuilder.ts";
 import type { WriteRequest } from "../src/modbus.ts";
-import { SerialManager } from "../src/serial.ts";
 
 // Helper to build a minimal write config
 function writeCfg(overrides: Partial<WriteRequest>): WriteRequest {
@@ -40,115 +39,6 @@ describe("frameBuilder write error branches", () => {
   });
 });
 
-class FakeSerialPort {
-  readable: ReadableStream<Uint8Array> | null = null;
-  writable: WritableStream<Uint8Array> | null = null;
-  async open(): Promise<void> {}
-  async close(): Promise<void> {}
-}
-
-type RequestPortFn = () => Promise<unknown>;
-function setNavigatorSerial(requestPortImpl: RequestPortFn) {
-  const g = globalThis as unknown as {
-    navigator?: { serial?: { requestPort?: RequestPortFn } };
-  };
-  // Node.js v22 では navigator が getter で再代入不可の場合があるため再代入せずプロパティを差し替える
-  if (!g.navigator) {
-    // lazily define navigator if not present
-    Object.defineProperty(g, "navigator", {
-      configurable: true,
-      enumerable: true,
-      value: {},
-      writable: true,
-    });
-  }
-  const nav = g.navigator as { serial?: { requestPort?: RequestPortFn } };
-  if (!nav.serial) {
-    nav.serial = { requestPort: requestPortImpl };
-  } else {
-    nav.serial.requestPort = requestPortImpl;
-  }
-}
-
-describe("SerialManager negative paths", () => {
-  it("connect without selecting port", async () => {
-    const sm = new SerialManager();
-    await expect(
-      sm.connect({ baudRate: 9600, dataBits: 8, parity: "none", stopBits: 1 }),
-    ).rejects.toThrow(/No port selected/);
-  });
-
-  it("send without writer", async () => {
-    const sm = new SerialManager();
-    await expect(sm.send(new Uint8Array([1, 2, 3]))).rejects.toThrow(
-      /Serial port not open/,
-    );
-  });
-
-  it("reconnect without port selected", async () => {
-    const sm = new SerialManager();
-    await expect(
-      sm.reconnect({
-        baudRate: 9600,
-        dataBits: 8,
-        parity: "none",
-        stopBits: 1,
-      }),
-    ).rejects.toThrow(/No port available/);
-  });
-
-  it("selectPort failure propagates", async () => {
-    const sm = new SerialManager();
-    const requestPort = vi.fn().mockRejectedValue(new Error("denied"));
-    setNavigatorSerial(requestPort);
-    await expect(sm.selectPort()).rejects.toThrow(/Failed to select port/);
-    expect(requestPort).toHaveBeenCalled();
-  });
-
-  it("EventEmitter off removes listener", () => {
-    const sm = new SerialManager();
-    const fn = vi.fn();
-    sm.on("connected", fn);
-    sm.off("connected", fn);
-    (sm as unknown as { emit: (e: string) => void }).emit("connected");
-    expect(fn).not.toHaveBeenCalled();
-  });
-
-  it("connect already connected throws", async () => {
-    const sm = new SerialManager();
-    const fake = new FakeSerialPort() as unknown as SerialPort & {
-      readable: ReadableStream<Uint8Array> | null;
-      writable: WritableStream<Uint8Array> | null;
-    };
-    (fake as { readable: ReadableStream<Uint8Array> | null }).readable =
-      new ReadableStream<Uint8Array>({
-        start(c) {
-          c.close();
-        },
-      });
-    (fake as { writable: WritableStream<Uint8Array> | null }).writable =
-      new WritableStream<Uint8Array>({
-        write() {
-          /* no-op */
-        },
-      });
-    const rp = vi.fn().mockResolvedValue(fake);
-    setNavigatorSerial(rp);
-    await sm.selectPort();
-    await sm.connect({
-      baudRate: 9600,
-      dataBits: 8,
-      parity: "none",
-      stopBits: 1,
-    });
-    // Force internal state for guard branch (simulate already connected)
-    (sm as unknown as { isConnected: boolean }).isConnected = true;
-    await expect(
-      sm.connect({ baudRate: 9600, dataBits: 8, parity: "none", stopBits: 1 }),
-    ).rejects.toThrow(/Already connected/);
-  });
-});
-
 import { isOk } from "option-t/plain_result";
 import { readHoldingRegisters } from "../src/ascii.ts";
 import { readHoldingRegisters as readHoldingRegistersRTU } from "../src/rtu.ts";
@@ -172,4 +62,3 @@ describe("Abort pre-check coverage", () => {
     expect(isOk(asciiResult)).toBe(false);
   });
 });
-/* eslint-enable @typescript-eslint/no-explicit-any */

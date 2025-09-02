@@ -11,10 +11,8 @@ import {
 import { beforeEach, describe, expect, it } from "vitest";
 import { calculateCRC16 } from "../src/crc.ts";
 import { readHoldingRegisters, writeSingleRegister } from "../src/rtu.ts";
-import {
-  MockTransport,
-  type MockTransportConfig,
-} from "../src/transport/index.ts";
+import { MockTransport } from "../src/transport/mock-transport.ts";
+import type { MockTransportConfig } from "../src/transport/transport.ts";
 
 describe("API Integration", () => {
   let transport: MockTransport;
@@ -159,22 +157,10 @@ describe("API Integration", () => {
     expect(finalValue).toBe(66);
   });
 
-  it("should demonstrate transport state management", async () => {
-    // Test transport state changes
-    expect(transport.state).toBe("connected");
+  it("should error when using pure API after manual disconnect", async () => {
     expect(transport.connected).toBe(true);
-
-    const stateChanges: string[] = [];
-    transport.addEventListener("statechange", (e) => {
-      stateChanges.push((e as CustomEvent<string>).detail);
-    });
-
     await transport.disconnect();
-    expect(transport.state).toBe("disconnected");
     expect(transport.connected).toBe(false);
-    expect(stateChanges).toContain("disconnected");
-
-    // Try to use pure function API with disconnected transport
     const result = await readHoldingRegisters(transport, 1, 0, 1);
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {

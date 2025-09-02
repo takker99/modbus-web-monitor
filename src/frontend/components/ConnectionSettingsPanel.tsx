@@ -1,10 +1,11 @@
 import type { FunctionalComponent } from "preact";
 import type { ModbusProtocol } from "../../frameBuilder.ts";
-import type { SerialConfig } from "../../serial.ts";
 
 interface Props {
-  serialConfig: SerialConfig;
-  setSerialConfig: (updater: (prev: SerialConfig) => SerialConfig) => void;
+  serialConfig: SerialOptions;
+  setSerialConfig: (
+    update: (prevState: SerialOptions) => SerialOptions,
+  ) => void;
   protocol: ModbusProtocol;
   onProtocolChange: (p: ModbusProtocol) => void;
   slaveId: number;

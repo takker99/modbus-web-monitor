@@ -8,7 +8,6 @@ import {
   validateRTUFrame,
 } from "../src/frameParser.ts";
 import { MockTransport } from "../src/transport/mock-transport.ts";
-import { TransportRegistry } from "../src/transport/transport.ts";
 
 // Utility to append CRC to a payload (without CRC)
 function withCRC(bytes: number[]): number[] {
@@ -26,7 +25,9 @@ describe("MockTransport uncovered branches", () => {
 
   it("disconnect no-op when already disconnected", async () => {
     const mt = new MockTransport({ type: "mock" });
-    await mt.disconnect(); // no throw
+    {
+      await using _ = mt;
+    }
     expect(mt.connected).toBe(false);
   });
 
@@ -51,21 +52,6 @@ describe("MockTransport uncovered branches", () => {
     await new Promise((r) => setTimeout(r, 5));
     expect(received.length).toBe(1);
     expect(Array.from(received[0])).toEqual([0x11, 0x22]);
-  });
-});
-
-describe("TransportRegistry invalid type branches", () => {
-  it("mock factory rejects wrong type", () => {
-    // 'mock' 登録ファクトリに 'serial' を与えてミスマッチエラーを誘発
-    expect(() =>
-      TransportRegistry.create({
-        baudRate: 9600,
-        dataBits: 8,
-        parity: "none",
-        stopBits: 1,
-        type: "serial",
-      }),
-    ).toThrow();
   });
 });
 

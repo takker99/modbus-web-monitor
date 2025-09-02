@@ -1,13 +1,11 @@
 import { isErr, unwrapErr, unwrapOk } from "option-t/plain_result";
-import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useRef, useState } from "preact/hooks";
 import { read as asciiRead, write as asciiWrite } from "../ascii.ts";
 import type { ModbusProtocol } from "../frameBuilder.ts";
 import { buildReadRequest, buildWriteRequest } from "../frameBuilder.ts";
 import type { ReadFunctionCode, WriteFunctionCode } from "../functionCodes.ts";
 import type { ModbusResponse, ReadRequest, WriteRequest } from "../modbus.ts";
 import { read as rtuRead, write as rtuWrite } from "../rtu.ts";
-import type { SerialConfig, SerialManager } from "../serial.ts";
-import { SerialTransport } from "../transport/serial-transport.ts";
 import type { IModbusTransport } from "../transport/transport.ts";
 import { ConnectionSettingsPanel } from "./components/ConnectionSettingsPanel.tsx";
 import { DataDisplayPanel } from "./components/DataDisplayPanel.tsx";
@@ -42,31 +40,26 @@ interface UIReadConfig {
 export function App() {
   // State management
   const { logs, addLog, clearLogs } = useLogs();
-  const {
-    manager: serialManager,
-    connected: isConnected,
-    portSelected,
-    portDisconnected,
-    reconnect: serialReconnect,
-  } = useSerial();
+
+  // Serial configuration state
+  const [serialConfig, setSerialConfig] = useState<SerialOptions>({
+    baudRate: 38400,
+    dataBits: 8,
+    flowControl: "none",
+    parity: "none",
+    stopBits: 1,
+  });
+  const { selectPort, transport } = useSerial(serialConfig);
   const {
     isPolling: isMonitoring,
     start: startPolling,
     stop: stopPolling,
   } = usePolling();
-  const connectionStatus: "Disconnected" | "Connected" = isConnected
+  const connectionStatus: "Disconnected" | "Connected" = transport?.connected
     ? "Connected"
     : "Disconnected";
   const [data, setData] = useState<ModbusResponse[]>([]);
   const [hexDisplay, setHexDisplay] = useState(false);
-
-  // Serial configuration state
-  const [serialConfig, setSerialConfig] = useState<SerialConfig>({
-    baudRate: 38400,
-    dataBits: 8,
-    parity: "none",
-    stopBits: 1,
-  });
 
   // Modbus configuration state
   const [slaveId, setSlaveId] = useState(1);
@@ -95,74 +88,44 @@ export function App() {
   // Instances (initialized via useEffect)
   const transportRef = useRef<IModbusTransport | null>(null);
 
-  useEffect(() => {
-    // Web Serial API support check
-    if (!("serial" in navigator)) {
-      addLog(
-        "Error",
-        "This browser does not support the Web Serial API. Please use Chrome 89+.",
-      );
-      return;
-    }
-
-    // Event listeners setup
-    if (!transportRef.current) {
-      // SerialTransport は内部で port 選択も行う connect() 前提。
-      // 既存の SerialManager (useSerial) を再利用するため第二引数に渡す。
-      transportRef.current = new SerialTransport(
-        {
-          ...serialConfig,
-          type: "serial",
-        },
-        serialManager as SerialManager,
-      );
-    }
-
-    return () => {
-      serialManager.disconnect();
-    };
-  }, [serialManager, protocol, addLog]);
-
-  const handlePortSelect = async () => {
+  const handlePortSelect = useCallback(async () => {
     try {
-      await serialManager.selectPort();
+      await selectPort();
       addLog("Info", "Serial port selected");
     } catch (error) {
       addLog("Error", `Port selection error: ${(error as Error).message}`);
     }
-  };
+  }, [selectPort, addLog]);
 
-  const handleConnect = async () => {
+  const handleConnect = useCallback(async () => {
     try {
-      await serialManager.connect(serialConfig);
+      await transport?.connect();
       addLog("Info", "Connected to serial port");
     } catch (error) {
       addLog("Error", `Connection error: ${(error as Error).message}`);
     }
-  };
+  }, [transport, addLog]);
 
-  const handleDisconnect = async () => {
+  const handleDisconnect = useCallback(async () => {
     try {
-      await serialManager.disconnect();
+      await transport?.disconnect();
       addLog("Info", "Disconnected from serial port");
     } catch (error) {
       addLog("Error", `Disconnection error: ${(error as Error).message}`);
     }
-  };
+  }, [transport, addLog]);
 
-  const handleReconnect = async () => {
+  const handleReconnect = useCallback(async () => {
     try {
       addLog("Info", "Attempting to reconnect...");
-      await serialReconnect(serialConfig);
+      await transport?.connect();
       addLog("Info", "Reconnected successfully");
     } catch (error) {
       addLog("Error", `Reconnection error: ${(error as Error).message}`);
     }
-  };
+  }, [transport, addLog]);
 
-  const handleRead = async () => {
-    if (!isConnected) return;
-    const transport = transportRef.current;
+  const handleRead = useCallback(async () => {
     if (!transport) {
       addLog("Error", "Transport not ready");
       return;
@@ -196,10 +159,9 @@ export function App() {
     } catch (e) {
       addLog("Error", `Read error: ${(e as Error).message}`);
     }
-  };
+  }, [transport, readConfig, slaveId, protocol, addLog]);
 
-  const handleWrite = async () => {
-    if (!isConnected) return;
+  const handleWrite = useCallback(async () => {
     try {
       let value: number | number[];
       const fc = writeConfig.functionCode;
@@ -267,9 +229,9 @@ export function App() {
     } catch (e) {
       addLog("Error", `Write error: ${(e as Error).message}`);
     }
-  };
+  }, [writeConfig, slaveId, protocol, addLog]);
 
-  const handleMonitorToggle = () => {
+  const handleMonitorToggle = useCallback(() => {
     if (isMonitoring) {
       stopPolling();
       addLog("Info", "Stopped monitoring");
@@ -277,46 +239,51 @@ export function App() {
     }
     startPolling(handleRead, pollingInterval);
     addLog("Info", `Started monitoring (interval: ${pollingInterval}ms)`);
-  };
+  }, [handleRead, pollingInterval, addLog]);
 
-  const handleProtocolChange = (newProtocol: ModbusProtocol) => {
-    if (isMonitoring) stopPolling();
-    setProtocol(newProtocol);
-    addLog("Info", `Protocol changed to ${newProtocol.toUpperCase()}`);
-  };
+  const handleProtocolChange = useCallback(
+    (newProtocol: ModbusProtocol) => {
+      if (isMonitoring) stopPolling();
+      setProtocol(newProtocol);
+      addLog("Info", `Protocol changed to ${newProtocol.toUpperCase()}`);
+    },
+    [isMonitoring, stopPolling, setProtocol, addLog],
+  );
 
-  const handlePollingIntervalChange = (value: number) => {
-    // Clamp to valid range
-    const clampedValue = Math.max(100, Math.min(60000, value));
-    setPollingInterval(clampedValue);
-    localStorage.setItem("modbus-polling-interval", clampedValue.toString());
+  const handlePollingIntervalChange = useCallback(
+    (value: number) => {
+      // Clamp to valid range
+      const clampedValue = Math.max(100, Math.min(60000, value));
+      setPollingInterval(clampedValue);
+      localStorage.setItem("modbus-polling-interval", clampedValue.toString());
 
-    if (clampedValue !== value) {
-      addLog(
-        "Warning",
-        `Polling interval clamped to ${clampedValue}ms (valid range: 100-60000ms)`,
-      );
-    }
-  };
+      if (clampedValue !== value) {
+        addLog(
+          "Warning",
+          `Polling interval clamped to ${clampedValue}ms (valid range: 100-60000ms)`,
+        );
+      }
+    },
+    [addLog],
+  );
 
-  const clearLogsAndData = () => {
+  const clearLogsAndData = useCallback(() => {
     clearLogs();
     setData([]);
-  };
+  }, [clearLogs]);
 
-  const copyLogEntry = async (log: {
-    timestamp: string;
-    type: string;
-    message: string;
-  }) => {
-    try {
-      const text = `${log.timestamp} [${log.type}] ${log.message}`;
-      await navigator.clipboard.writeText(text);
-      console.log("Copied log entry:", text);
-    } catch (err) {
-      console.error("Failed to copy log entry:", err);
-    }
-  };
+  const copyLogEntry = useCallback(
+    async (log: { timestamp: string; type: string; message: string }) => {
+      try {
+        const text = `${log.timestamp} [${log.type}] ${log.message}`;
+        await navigator.clipboard.writeText(text);
+        console.log("Copied log entry:", text);
+      } catch (err) {
+        console.error("Failed to copy log entry:", err);
+      }
+    },
+    [],
+  );
 
   const copyAllLogs = useCallback(async () => {
     try {
@@ -330,14 +297,18 @@ export function App() {
     }
   }, [logs]);
 
-  const formatValue = (value: number) =>
-    utilFormatValue(value, { hex: hexDisplay });
+  const formatValue = useCallback(
+    (value: number) => utilFormatValue(value, { hex: hexDisplay }),
+    [hexDisplay],
+  );
 
   // Memoized event handlers to prevent unnecessary re-renders
   // handlers now embedded inside subcomponents
   // Helper functions for multi-write operations
-  const formatAddress = (address: number) =>
-    utilFormatAddress(address, { hex: hexDisplay });
+  const formatAddress = useCallback(
+    (address: number) => utilFormatAddress(address, { hex: hexDisplay }),
+    [hexDisplay],
+  );
 
   return (
     <div className="container">
@@ -355,25 +326,25 @@ export function App() {
           </span>
         </div>
       </header>
-      {portDisconnected && (
+      {!transport?.connected && (
         <PortDisconnectedBanner onReconnect={handleReconnect} />
       )}
       <main className="main-content">
         <ConnectionSettingsPanel
-          isConnected={isConnected}
+          isConnected={!!transport?.connected}
           onConnect={handleConnect}
           onDisconnect={handleDisconnect}
           onProtocolChange={handleProtocolChange}
           onSelectPort={handlePortSelect}
           onSlaveIdChange={setSlaveId}
-          portSelected={portSelected}
+          portSelected={!!transport}
           protocol={protocol}
           serialConfig={serialConfig}
           setSerialConfig={setSerialConfig}
           slaveId={slaveId}
         />
         <ReadPanel
-          isConnected={isConnected}
+          isConnected={!!transport?.connected}
           isMonitoring={isMonitoring}
           onMonitorToggle={handleMonitorToggle}
           onPollingIntervalChange={handlePollingIntervalChange}
@@ -384,7 +355,7 @@ export function App() {
         />
         <WritePanel
           hexDisplay={hexDisplay}
-          isConnected={isConnected}
+          isConnected={!!transport?.connected}
           onWrite={handleWrite}
           setWriteConfig={setWriteConfig}
           writeConfig={writeConfig}
@@ -398,7 +369,7 @@ export function App() {
           onClear={clearLogsAndData}
           onCopyAll={copyAllLogs}
           onCopyEntry={copyLogEntry}
-          onHexToggle={(checked) => setHexDisplay(checked)}
+          onHexToggle={setHexDisplay}
           readStartAddress={readConfig.address}
         />
       </main>

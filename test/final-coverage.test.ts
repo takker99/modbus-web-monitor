@@ -5,48 +5,8 @@ import {
   ModbusFrameError,
   ModbusLRCError,
 } from "../src/errors.ts";
-import { createTransport, TransportRegistry } from "../src/transport/index.ts";
-import { TcpTransport } from "../src/transport/tcp-transport.ts";
-import type { TransportConfig } from "../src/transport/transport.ts";
 
 describe("Final Coverage", () => {
-  describe("TransportRegistry coverage", () => {
-    it("should handle TCP transport creation", () => {
-      const tcpConfig = {
-        host: "localhost",
-        port: 502,
-        type: "tcp" as const,
-      };
-
-      const transport = TransportRegistry.create(tcpConfig);
-      expect(transport).toBeDefined();
-      expect(transport.config).toEqual(tcpConfig);
-    });
-
-    it("should use createTransport helper for TCP", () => {
-      const tcpConfig = {
-        host: "localhost",
-        port: 502,
-        type: "tcp" as const,
-      };
-
-      const transport = createTransport(tcpConfig);
-      expect(transport).toBeDefined();
-      expect(transport.config).toEqual(tcpConfig);
-    });
-
-    it("should handle unknown transport types with more coverage", () => {
-      const invalidConfig = {
-        type: "websocket",
-        url: "ws://localhost:8080",
-      } as unknown as TransportConfig;
-
-      expect(() => TransportRegistry.create(invalidConfig)).toThrow(
-        "Unknown transport type: websocket",
-      );
-    });
-  });
-
   describe("Error handling edge cases", () => {
     it("should exercise more error paths", async () => {
       // Create instances to exercise constructors
@@ -58,25 +18,6 @@ describe("Final Coverage", () => {
 
       const lrcError = new ModbusLRCError();
       expect(lrcError.message).toBe("LRC error");
-    });
-  });
-
-  describe("Index file coverage", () => {
-    it("should handle missing transport cases in index", async () => {
-      // Just exercise the import path
-      expect(TcpTransport).toBeDefined();
-
-      // Test the index file's createTransport with serial
-      const serialConfig = {
-        baudRate: 9600,
-        dataBits: 8 as const,
-        parity: "none" as const,
-        stopBits: 1 as const,
-        type: "serial" as const,
-      };
-
-      const serialTransport = createTransport(serialConfig);
-      expect(serialTransport).toBeDefined();
     });
   });
 });

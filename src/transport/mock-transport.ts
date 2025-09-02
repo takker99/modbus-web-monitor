@@ -1,12 +1,7 @@
 // Mock transport implementation for testing
 // Provides a controllable transport that can simulate various scenarios
 
-import type {
-  IModbusTransport,
-  MockTransportConfig,
-  TransportEventMap,
-  TransportState,
-} from "./transport.ts";
+import type { IModbusTransport, MockTransportConfig } from "./transport.ts";
 
 /** Options controlling test / simulation behaviour of {@link MockTransport}. */
 export interface MockTransportOptions {
@@ -34,7 +29,7 @@ export interface MockTransportOptions {
  * serial hardware.
  */
 export class MockTransport implements IModbusTransport {
-  private _state: TransportState = "disconnected";
+  private _connected = false;
   private options: MockTransportOptions;
   private readonly target = new EventTarget();
 
@@ -63,22 +58,15 @@ export class MockTransport implements IModbusTransport {
   }
 
   /** Current lifecycle state. */
-  get state(): TransportState {
-    return this._state;
-  }
-
-  /** True while the mock is considered connected. */
   get connected(): boolean {
-    return this._state === "connected";
+    return this._connected;
   }
 
   /** Establish a simulated connection (optionally delayed / failed). */
   async connect(): Promise<void> {
-    if (this._state === "connected") {
+    if (this._connected) {
       return;
     }
-
-    this.setState("connecting");
 
     // Simulate connection delay
     const connectDelay = this.options.connectDelay ?? 0;
@@ -87,17 +75,14 @@ export class MockTransport implements IModbusTransport {
     }
 
     if (this.options.shouldFailConnect) {
-      this.setState("error");
       throw new Error(this.options.errorMessage);
     }
-
-    this.setState("connected");
-    this.dispatch("open");
+    this._connected = true;
   }
 
   /** Terminate the simulated connection (optionally delayed). */
-  async disconnect(): Promise<void> {
-    if (this._state === "disconnected") {
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (!this._connected) {
       return;
     }
 
@@ -107,16 +92,18 @@ export class MockTransport implements IModbusTransport {
       await this.delay(disconnectDelay);
     }
 
-    this.setState("disconnected");
-    this.dispatch("close");
+    this._connected = false;
   }
+
+  /** Terminate the simulated connection (optionally delayed). */
+  disconnect = this[Symbol.asyncDispose].bind(this);
 
   /**
    * Send raw bytes through the mock. May trigger an auto response or a
    * simulated failure depending on {@link MockTransportOptions}.
    */
   postMessage(data: Uint8Array): void {
-    if (this._state !== "connected") {
+    if (!this._connected) {
       throw new Error("Transport not connected");
     }
     const act = () => {
@@ -130,14 +117,14 @@ export class MockTransport implements IModbusTransport {
       const response = this.options.autoResponses?.get(dataKey);
       if (response) {
         setTimeout(() => {
-          if (this._state === "connected") this.dispatchMessage(response);
+          if (this._connected) this.dispatchMessage(response);
         }, 1);
       }
     };
     const sendDelay = this.options.sendDelay ?? 0;
     if (sendDelay > 0) {
       setTimeout(() => {
-        if (this._state === "connected") act();
+        if (this._connected) act();
       }, sendDelay);
     } else {
       act();
@@ -147,22 +134,21 @@ export class MockTransport implements IModbusTransport {
   // Testing utilities
   /** Manually inject inbound data as if it was received from the peer. */
   public simulateData(data: Uint8Array): void {
-    if (this._state === "connected") {
+    if (this._connected) {
       this.dispatchMessage(data);
     }
   }
 
   /** Simulate a transport level error (transitions to `error` state). */
   public simulateError(error: Error): void {
-    this.setState("error");
+    this._connected = false;
     this.dispatchError(error);
   }
 
   /** Simulate an abrupt disconnect (fires `close`). */
   public simulateDisconnect(): void {
-    if (this._state === "connected") {
-      this.setState("disconnected");
-      this.dispatch("close");
+    if (this._connected) {
+      this._connected = false;
     }
   }
 
@@ -199,29 +185,29 @@ export class MockTransport implements IModbusTransport {
     this.options.autoResponses?.clear();
   }
 
-  private setState(newState: TransportState): void {
-    if (this._state !== newState) {
-      this._state = newState;
-      this.dispatch(
-        "statechange",
-        new CustomEvent("statechange", { detail: newState }),
-      );
-    }
-  }
-
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  addEventListener<K extends keyof TransportEventMap>(
-    type: K,
-    listener: (ev: TransportEventMap[K]) => void,
+  addEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
     options?: AddEventListenerOptions,
   ): void {
-    this.target.addEventListener(type, listener as EventListener, options);
+    this.target.addEventListener(type, listener, options);
+  }
+  removeEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
+    options?: EventListenerOptions,
+  ): void {
+    this.target.removeEventListener(type, listener, options);
+  }
+  dispatchEvent(event: Event): boolean {
+    return this.target.dispatchEvent(event);
   }
 
-  private dispatch(type: keyof TransportEventMap, event?: Event) {
+  private dispatch(type: string, event?: Event) {
     this.target.dispatchEvent(event ?? new Event(type));
   }
   private dispatchMessage(data: Uint8Array) {

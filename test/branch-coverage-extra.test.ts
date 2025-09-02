@@ -3,21 +3,12 @@ import { describe, expect, it } from "vitest";
 import { calculateCRC16 } from "../src/crc.ts";
 import { parseRTUFrame, validateRTUFrame } from "../src/frameParser.ts";
 import { MockTransport } from "../src/transport/mock-transport.ts";
-import { TransportRegistry } from "../src/transport/transport.ts";
 
 // Helper: append CRC
 function withCRC(bytes: number[]): number[] {
   const crc = calculateCRC16(bytes);
   return [...bytes, crc & 0xff, (crc >> 8) & 0xff];
 }
-
-describe("TransportRegistry extra branches", () => {
-  it("unknown transport type throws", () => {
-    expect(() =>
-      TransportRegistry.create({ type: "websocket", url: "ws://x" }),
-    ).toThrow(/Unknown transport type/);
-  });
-});
 
 describe("MockTransport failure branches", () => {
   it("connect failure branch", async () => {

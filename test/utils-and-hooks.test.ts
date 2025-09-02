@@ -3,10 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLogs } from "../src/frontend/hooks/useLogs.ts";
 import { usePolling } from "../src/frontend/hooks/usePolling.ts";
 import {
-  type SerialManagerLike,
-  useSerial,
-} from "../src/frontend/hooks/useSerial.ts";
-import {
   formatAddress,
   formatValue,
   parseCoilValues,
@@ -75,74 +71,4 @@ describe("usePolling", () => {
     expect(result.current.isPolling).toBe(false);
   });
   afterEach(() => vi.useRealTimers());
-});
-
-// For useSerial we supply a mock SerialManager minimal implementation
-type Listener = (...args: unknown[]) => void;
-class MockSerialManager implements SerialManagerLike {
-  private listeners: Record<string, Listener[]> = {};
-  on(ev: string, fn: Listener) {
-    if (!this.listeners[ev]) this.listeners[ev] = [];
-    (this.listeners[ev] as Listener[]).push(fn);
-  }
-  off(ev: string, fn: Listener) {
-    this.listeners[ev] = (this.listeners[ev] || []).filter((f) => f !== fn);
-  }
-  emit(ev: string, ...args: unknown[]) {
-    (this.listeners[ev] || []).forEach((f) => {
-      f(...args);
-    });
-  }
-  selectPort = vi.fn(async () => {
-    this.emit("portSelected");
-  });
-  connect = vi.fn(async () => {
-    this.emit("connected");
-  });
-  disconnect = vi.fn(async () => {
-    this.emit("disconnected");
-  });
-  reconnect = vi.fn(async () => {
-    this.emit("connected");
-  });
-}
-
-describe("useSerial", () => {
-  it("tracks connection and port states", async () => {
-    const mgr = new MockSerialManager();
-    // useSerial expects a SerialManager; we provide subset and cast via unknown -> SerialManagerSubset
-    const { result } = renderHook(() => useSerial({ manager: mgr }));
-    expect(result.current.portSelected).toBe(false);
-    await result.current.selectPort();
-    expect(result.current.portSelected).toBe(true);
-    await result.current.connect({
-      baudRate: 9600,
-      dataBits: 8,
-      parity: "none",
-      stopBits: 1,
-    });
-    expect(result.current.connected).toBe(true);
-    await result.current.disconnect();
-    expect(result.current.connected).toBe(false);
-  });
-  it("handles unexpected disconnect event", async () => {
-    const mgr = new MockSerialManager();
-    const { result } = renderHook(() => useSerial({ manager: mgr }));
-    await result.current.selectPort();
-    await result.current.connect({
-      baudRate: 9600,
-      dataBits: 8,
-      parity: "none",
-      stopBits: 1,
-    });
-    expect(result.current.connected).toBe(true);
-    // simulate unexpected
-    act(() => {
-      (mgr as unknown as { emit: (ev: string) => void }).emit(
-        "portDisconnected",
-      );
-    });
-    expect(result.current.connected).toBe(false);
-    expect(result.current.portDisconnected).toBe(true);
-  });
 });

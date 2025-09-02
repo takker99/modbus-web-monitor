@@ -4,7 +4,6 @@ import { act } from "preact/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { useLogs } from "../src/frontend/hooks/useLogs.ts";
 import { usePolling } from "../src/frontend/hooks/usePolling.ts";
-import { useSerial } from "../src/frontend/hooks/useSerial.ts";
 import {
   formatAddress,
   formatValue,
@@ -77,14 +76,6 @@ describe("usePolling branch guards", () => {
     }); // ignored branch
     vi.useRealTimers();
     expect(calls.length).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe("useSerial branch: no events before select/connect", () => {
-  it("state remains disconnected until operations", () => {
-    const { result } = renderHook(() => useSerial());
-    expect(result.current.connected).toBe(false);
-    expect(result.current.portSelected).toBe(false);
   });
 });
 

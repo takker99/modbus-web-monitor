@@ -1,24 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createTransport,
-  MockTransport,
-  type MockTransportConfig,
-  SerialTransport,
-  type SerialTransportConfig,
-  TransportRegistry,
-} from "../src/transport/index.ts";
+import { beforeEach, describe, expect, it } from "vitest";
+import { MockTransport } from "../src/transport/mock-transport.ts";
+import { SerialTransport } from "../src/transport/serial-transport.ts";
 import { TcpTransport } from "../src/transport/tcp-transport.ts";
+import type {
+  MockTransportConfig,
+  SerialTransportConfig,
+} from "../src/transport/transport.ts";
+import { MockSerialPort } from "./mock-serial-port.ts";
 
 // Clean minimal transport tests (EventTarget API)
 describe("transport: minimal", () => {
-  it("registry unknown type", () => {
-    expect(() =>
-      TransportRegistry.create({
-        type: "nope",
-      } as unknown as MockTransportConfig),
-    ).toThrow("Unknown transport type: nope");
-  });
-
   describe("mock", () => {
     let transport: MockTransport;
     let cfg: MockTransportConfig;
@@ -55,8 +46,7 @@ describe("transport: minimal", () => {
   });
 
   describe("serial", () => {
-    let serial: SerialTransport;
-    beforeEach(() => {
+    it("postMessage when disconnected emits error", () => {
       const cfg: SerialTransportConfig = {
         baudRate: 9600,
         dataBits: 8,
@@ -64,41 +54,75 @@ describe("transport: minimal", () => {
         stopBits: 1,
         type: "serial",
       };
-      serial = new SerialTransport(cfg);
-    });
-    it("postMessage when disconnected", () => {
-      expect(() => serial.postMessage(new Uint8Array([1]))).toThrow(
-        "Transport not connected",
+      const serial = new SerialTransport(
+        cfg,
+        new MockSerialPort() as unknown as SerialPort,
       );
+      let err: Error | null = null;
+      serial.addEventListener(
+        "error",
+        (ev) => {
+          err = (ev as CustomEvent<Error>).detail;
+        },
+        { once: true },
+      );
+      serial.postMessage(new Uint8Array([1]));
+      expect(err).toBeInstanceOf(Error);
+      // @ts-expect-error test message presence
+      expect(err?.message).toBe("Transport not connected");
     });
-    it("async send error dispatch", async () => {
-      (serial as unknown as { state: string }).state = "connected";
-      const e = new Error("fail");
-      vi.spyOn(
-        (
-          serial as unknown as {
-            serialManager: { send: (d: Uint8Array) => Promise<void> };
-          }
-        ).serialManager,
-        "send",
-      ).mockRejectedValue(e);
-      let got: Error | null = null;
+
+    it("connect success sets up writer (no open event now)", async () => {
+      const cfg: SerialTransportConfig = {
+        baudRate: 9600,
+        dataBits: 8,
+        parity: "none",
+        stopBits: 1,
+        type: "serial",
+      };
+      const port = new MockSerialPort();
+      const serial = new SerialTransport(cfg, port);
+      await serial.connect();
+      expect(serial.connected).toBe(true);
+    });
+
+    it("async write error dispatch", async () => {
+      const cfg: SerialTransportConfig = {
+        baudRate: 9600,
+        dataBits: 8,
+        parity: "none",
+        stopBits: 1,
+        type: "serial",
+      };
+      // Custom mock port whose writer.write rejects
+      class FailingPort extends MockSerialPort {
+        override get writable() {
+          const base = super.writable;
+          if (!base) return base;
+          return {
+            getWriter: () => ({
+              close: () => Promise.resolve(),
+              releaseLock: () => {},
+              write: () => Promise.reject(new Error("fail")),
+            }),
+          } as unknown as WritableStream<Uint8Array>;
+        }
+      }
+      const port = new FailingPort();
+      const serial = new SerialTransport(cfg, port);
+      await serial.connect();
+      let got: Error | undefined;
       serial.addEventListener("error", (ev) => {
         got = (ev as CustomEvent<Error>).detail;
       });
-      serial.postMessage(new Uint8Array([3]));
+      serial.postMessage(new Uint8Array([9]));
       await new Promise((r) => setTimeout(r, 0));
-      expect(got).toBe(e);
+      expect(got?.message).toBe("fail");
     });
   });
 
   it("tcp unsupported connect", async () => {
     const tcp = new TcpTransport({ host: "localhost", port: 502, type: "tcp" });
     await expect(tcp.connect()).rejects.toThrow("TCP transport not supported");
-  });
-
-  it("createTransport helper", () => {
-    const t = createTransport({ type: "mock" });
-    expect(t).toBeInstanceOf(MockTransport);
   });
 });

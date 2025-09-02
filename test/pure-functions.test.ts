@@ -14,10 +14,8 @@ import {
   writeSingleCoil,
   writeSingleRegister,
 } from "../src/rtu.ts";
-import {
-  MockTransport,
-  type MockTransportConfig,
-} from "../src/transport/index.ts";
+import { MockTransport } from "../src/transport/mock-transport.ts";
+import type { MockTransportConfig } from "../src/transport/transport.ts";
 
 describe("Pure Function API", () => {
   let transport: MockTransport;
