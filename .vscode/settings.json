@@ -12,6 +12,7 @@
     "cd": true,
     "grep": true,
     "head": true,
+    "ls": true,
     "tail": true,
     "pnpm run check": true,
     "pnpm run fix": true,

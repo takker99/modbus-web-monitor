@@ -1,15 +1,46 @@
-import { useCallback, useEffect, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import {
+  readCoils as asciiReadCoils,
+  readDiscreteInputs as asciiReadDiscreteInputs,
+  readHoldingRegisters as asciiReadHoldingRegisters,
+  readInputRegisters as asciiReadInputRegisters,
+  writeMultipleCoils as asciiWriteMultipleCoils,
+  writeMultipleRegisters as asciiWriteMultipleRegisters,
+  writeSingleCoil as asciiWriteSingleCoil,
+  writeSingleRegister as asciiWriteSingleRegister,
+} from "./api/ascii.ts";
+import {
+  readCoils as rtuReadCoils,
+  readDiscreteInputs as rtuReadDiscreteInputs,
+  readHoldingRegisters as rtuReadHoldingRegisters,
+  readInputRegisters as rtuReadInputRegisters,
+  writeMultipleCoils as rtuWriteMultipleCoils,
+  writeMultipleRegisters as rtuWriteMultipleRegisters,
+  writeSingleCoil as rtuWriteSingleCoil,
+  writeSingleRegister as rtuWriteSingleRegister,
+} from "./api/rtu.ts";
+import { ConnectionSettingsPanel } from "./components/ConnectionSettingsPanel.tsx";
+import { DataDisplayPanel } from "./components/DataDisplayPanel.tsx";
+import { PortDisconnectedBanner } from "./components/PortDisconnectedBanner.tsx";
+import { ReadPanel } from "./components/ReadPanel.tsx";
+import { SerialManagerTransport } from "./components/SerialManagerTransport.ts";
+import { WritePanel } from "./components/WritePanel.tsx";
 import type { ModbusProtocol } from "./frameBuilder.ts";
 import type { WriteFunctionCode } from "./functionCodes.ts";
-import { isReadFunctionCode, isWriteFunctionCode } from "./functionCodes.ts";
-import type {
-  ModbusReadConfig,
-  ModbusResponse,
-  ModbusWriteConfig,
-} from "./modbus.ts";
-import { ModbusClient } from "./modbus.ts";
-import type { SerialConfig } from "./serial.ts";
-import { SerialManager } from "./serial.ts";
+import { useLogs } from "./hooks/useLogs.ts";
+import { usePolling } from "./hooks/usePolling.ts";
+import { useSerial } from "./hooks/useSerial.ts";
+import type { ModbusResponse } from "./modbus-base.ts";
+import type { SerialConfig, SerialManager } from "./serial.ts";
+// --- SerialManager を IModbusTransport へアダプト ---
+import type { IModbusTransport } from "./transport/transport.ts";
+import { isOk, type Result } from "./types/result.ts";
+import {
+  parseCoilValues,
+  parseRegisterValues,
+  formatAddress as utilFormatAddress,
+  formatValue as utilFormatValue,
+} from "./utils/modbusUtils.ts";
 
 // Extended interface for the UI state (includes additional fields for multi-value input)
 interface ModbusWriteUIConfig {
@@ -22,16 +53,22 @@ interface ModbusWriteUIConfig {
 
 export function App() {
   // State management
-  const [connectionStatus, setConnectionStatus] = useState<
-    "Disconnected" | "Connected"
-  >("Disconnected");
-  const [portSelected, setPortSelected] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [portDisconnected, setPortDisconnected] = useState(false); // Track unexpected disconnection
-  const [isMonitoring, setIsMonitoring] = useState(false);
-  const [logs, setLogs] = useState<
-    Array<{ timestamp: string; type: string; message: string }>
-  >([]);
+  const { logs, addLog, clearLogs } = useLogs();
+  const {
+    manager: serialManager,
+    connected: isConnected,
+    portSelected,
+    portDisconnected,
+    reconnect: serialReconnect,
+  } = useSerial();
+  const {
+    isPolling: isMonitoring,
+    start: startPolling,
+    stop: stopPolling,
+  } = usePolling();
+  const connectionStatus: "Disconnected" | "Connected" = isConnected
+    ? "Connected"
+    : "Disconnected";
   const [data, setData] = useState<ModbusResponse[]>([]);
   const [hexDisplay, setHexDisplay] = useState(false);
 
@@ -46,9 +83,12 @@ export function App() {
   // Modbus configuration state
   const [slaveId, setSlaveId] = useState(1);
   const [protocol, setProtocol] = useState<ModbusProtocol>("rtu");
-  const [readConfig, setReadConfig] = useState<
-    Omit<ModbusReadConfig, "slaveId">
-  >({
+  interface UIReadConfig {
+    functionCode: 1 | 2 | 3 | 4;
+    quantity: number;
+    startAddress: number;
+  }
+  const [readConfig, setReadConfig] = useState<UIReadConfig>({
     functionCode: 3,
     quantity: 10,
     startAddress: 0,
@@ -70,8 +110,7 @@ export function App() {
   });
 
   // Instances (initialized via useEffect)
-  const [serialManager] = useState(() => new SerialManager());
-  const [modbusClient] = useState(() => new ModbusClient());
+  const transportRef = useRef<IModbusTransport | null>(null);
 
   useEffect(() => {
     // Web Serial API support check
@@ -84,98 +123,22 @@ export function App() {
     }
 
     // Event listeners setup
-    const setupEventListeners = () => {
-      // SerialManager events
-      serialManager.on("portSelected", () => {
-        console.log("Port selected");
-        setPortSelected(true);
-        addLog("Info", "Serial port selected");
-      });
-
-      serialManager.on("connected", () => {
-        console.log("Connected");
-        setConnectionStatus("Connected");
-        setIsConnected(true);
-        addLog("Info", "Connected to serial port");
-      });
-
-      serialManager.on("disconnected", () => {
-        console.log("Disconnected");
-        setConnectionStatus("Disconnected");
-        setIsConnected(false);
-        setIsMonitoring(false);
-        setPortDisconnected(false); // Clear disconnect flag on normal disconnect
-        addLog("Info", "Disconnected from serial port");
-      });
-
-      serialManager.on("portDisconnected", () => {
-        console.log("Port disconnected unexpectedly");
-        setConnectionStatus("Disconnected");
-        setIsConnected(false);
-        setIsMonitoring(false);
-        setPortDisconnected(true); // Set disconnect flag for unexpected disconnect
-        addLog(
-          "Warning",
-          "Serial port disconnected unexpectedly (cable unplugged or permission revoked)",
-        );
-      });
-
-      serialManager.on("error", (error: Error) => {
-        addLog("Error", `Serial communication error: ${error.message}`);
-      });
-
-      serialManager.on("data", (data: Uint8Array) => {
-        modbusClient.handleResponse(data);
-        addLog(
-          "Received",
-          Array.from(data)
-            .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
-            .join(" "),
-        );
-      });
-
-      // ModbusClient events
-      modbusClient.on("response", (response: ModbusResponse) => {
-        setData((prev) => [...prev.slice(-99), response]); // 最新100件保持
-        addLog(
-          "Info",
-          `Modbus response (${response.functionCodeLabel}): received ${response.data.length} values`,
-        );
-      });
-
-      modbusClient.on("error", (error: Error) => {
-        addLog("Error", `Modbus communication error: ${error.message}`);
-      });
-
-      modbusClient.on("request", (data: Uint8Array) => {
-        serialManager.send(data);
-        addLog(
-          "Sent",
-          Array.from(data)
-            .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
-            .join(" "),
-        );
-      });
-    };
-
-    setupEventListeners();
-    modbusClient.protocol = protocol;
+    if (!transportRef.current) {
+      transportRef.current = new SerialManagerTransport(
+        serialManager as SerialManager,
+        addLog,
+      );
+    }
 
     return () => {
-      // Cleanup
       serialManager.disconnect();
-      modbusClient.stopMonitoring();
     };
-  }, [serialManager, modbusClient, protocol]);
-
-  const addLog = (type: string, message: string) => {
-    const time = new Date().toLocaleTimeString();
-    setLogs((prev) => [...prev.slice(-99), { message, timestamp: time, type }]); // 最新100件保持
-  };
+  }, [serialManager, protocol, addLog]);
 
   const handlePortSelect = async () => {
     try {
       await serialManager.selectPort();
+      addLog("Info", "Serial port selected");
     } catch (error) {
       addLog("Error", `Port selection error: ${(error as Error).message}`);
     }
@@ -184,7 +147,7 @@ export function App() {
   const handleConnect = async () => {
     try {
       await serialManager.connect(serialConfig);
-      setPortDisconnected(false); // Clear disconnect flag on successful connection
+      addLog("Info", "Connected to serial port");
     } catch (error) {
       addLog("Error", `Connection error: ${(error as Error).message}`);
     }
@@ -193,6 +156,7 @@ export function App() {
   const handleDisconnect = async () => {
     try {
       await serialManager.disconnect();
+      addLog("Info", "Disconnected from serial port");
     } catch (error) {
       addLog("Error", `Disconnection error: ${(error as Error).message}`);
     }
@@ -201,8 +165,7 @@ export function App() {
   const handleReconnect = async () => {
     try {
       addLog("Info", "Attempting to reconnect...");
-      await serialManager.reconnect(serialConfig);
-      setPortDisconnected(false); // Clear disconnect flag on successful reconnection
+      await serialReconnect(serialConfig);
       addLog("Info", "Reconnected successfully");
     } catch (error) {
       addLog("Error", `Reconnection error: ${(error as Error).message}`);
@@ -210,74 +173,192 @@ export function App() {
   };
 
   const handleRead = async () => {
+    if (!isConnected) return;
+    const { functionCode, quantity, startAddress } = readConfig;
+    const transport = transportRef.current;
+    if (!transport) {
+      addLog("Error", "Transport not ready");
+      return;
+    }
+    const commonArgs: [IModbusTransport, number, number, number] = [
+      transport,
+      slaveId,
+      startAddress,
+      quantity,
+    ];
+    let result: Result<ModbusResponse, Error> | undefined;
     try {
-      const config: ModbusReadConfig = { ...readConfig, slaveId };
-      await modbusClient.read(config);
-    } catch (error) {
-      addLog("Error", `Read error: ${(error as Error).message}`);
+      if (protocol === "rtu") {
+        switch (functionCode) {
+          case 1:
+            result = await rtuReadCoils(...commonArgs);
+            break;
+          case 2:
+            result = await rtuReadDiscreteInputs(...commonArgs);
+            break;
+          case 3:
+            result = await rtuReadHoldingRegisters(...commonArgs);
+            break;
+          case 4:
+            result = await rtuReadInputRegisters(...commonArgs);
+            break;
+        }
+      } else {
+        switch (functionCode) {
+          case 1:
+            result = await asciiReadCoils(...commonArgs);
+            break;
+          case 2:
+            result = await asciiReadDiscreteInputs(...commonArgs);
+            break;
+          case 3:
+            result = await asciiReadHoldingRegisters(...commonArgs);
+            break;
+          case 4:
+            result = await asciiReadInputRegisters(...commonArgs);
+            break;
+        }
+      }
+      if (result && isOk(result)) {
+        const resp = result.data;
+        setData((prev) => [...prev.slice(-99), resp]);
+        addLog(
+          "Info",
+          `Modbus response (${resp.functionCodeLabel}): received ${resp.data.length} values`,
+        );
+      } else if (result) {
+        addLog("Error", `Read error: ${result.error.message}`);
+      }
+    } catch (e) {
+      addLog("Error", `Read error: ${(e as Error).message}`);
     }
   };
 
   const handleWrite = async () => {
+    if (!isConnected) return;
     try {
       let value: number | number[];
-
-      if (writeConfig.functionCode === 15) {
-        // FC15 - Write Multiple Coils
+      const fc = writeConfig.functionCode;
+      if (fc === 15) {
         value = parseCoilValues(writeConfig.multiValues);
         addLog(
           "Info",
           `Writing ${value.length} coils starting at address ${writeConfig.address}`,
         );
-      } else if (writeConfig.functionCode === 16) {
-        // FC16 - Write Multiple Registers
-        value = parseRegisterValues(writeConfig.multiValues);
+      } else if (fc === 16) {
+        value = parseRegisterValues(writeConfig.multiValues, {
+          hex: hexDisplay,
+        });
         addLog(
           "Info",
           `Writing ${value.length} registers starting at address ${writeConfig.address}`,
         );
       } else {
-        // FC05/06 - Single writes
-        if (hexDisplay) {
-          value = Number.parseInt(writeConfig.value, 16);
-        } else {
-          value = Number.parseInt(writeConfig.value, 10);
+        value = hexDisplay
+          ? Number.parseInt(writeConfig.value, 16)
+          : Number.parseInt(writeConfig.value, 10);
+        if (Number.isNaN(value)) throw new Error("Invalid value format");
+      }
+      let result: Result<void, Error> | undefined;
+      const t = transportRef.current;
+      if (!t) {
+        addLog("Error", "Transport not ready");
+        return;
+      }
+      if (protocol === "rtu") {
+        switch (fc) {
+          case 5:
+            result = await rtuWriteSingleCoil(
+              t,
+              slaveId,
+              writeConfig.address,
+              (value as number) !== 0,
+            );
+            break;
+          case 6:
+            result = await rtuWriteSingleRegister(
+              t,
+              slaveId,
+              writeConfig.address,
+              value as number,
+            );
+            break;
+          case 15:
+            result = await rtuWriteMultipleCoils(
+              t,
+              slaveId,
+              writeConfig.address,
+              (value as number[]).map((v) => v !== 0),
+            );
+            break;
+          case 16:
+            result = await rtuWriteMultipleRegisters(
+              t,
+              slaveId,
+              writeConfig.address,
+              value as number[],
+            );
+            break;
         }
-
-        if (Number.isNaN(value)) {
-          throw new Error("Invalid value format");
+      } else {
+        switch (fc) {
+          case 5:
+            result = await asciiWriteSingleCoil(
+              t,
+              slaveId,
+              writeConfig.address,
+              (value as number) !== 0,
+            );
+            break;
+          case 6:
+            result = await asciiWriteSingleRegister(
+              t,
+              slaveId,
+              writeConfig.address,
+              value as number,
+            );
+            break;
+          case 15:
+            result = await asciiWriteMultipleCoils(
+              t,
+              slaveId,
+              writeConfig.address,
+              (value as number[]).map((v) => v !== 0),
+            );
+            break;
+          case 16:
+            result = await asciiWriteMultipleRegisters(
+              t,
+              slaveId,
+              writeConfig.address,
+              value as number[],
+            );
+            break;
         }
       }
-
-      const config: ModbusWriteConfig = {
-        address: writeConfig.address,
-        functionCode: writeConfig.functionCode,
-        slaveId,
-        value,
-      };
-
-      await modbusClient.write(config);
-    } catch (error) {
-      addLog("Error", `Write error: ${(error as Error).message}`);
+      if (result && !isOk(result)) {
+        addLog("Error", `Write error: ${result.error.message}`);
+      } else {
+        addLog("Info", `Write success (FC${fc})`);
+      }
+    } catch (e) {
+      addLog("Error", `Write error: ${(e as Error).message}`);
     }
   };
 
   const handleMonitorToggle = () => {
     if (isMonitoring) {
-      modbusClient.stopMonitoring();
-      setIsMonitoring(false);
+      stopPolling();
       addLog("Info", "Stopped monitoring");
-    } else {
-      const config: ModbusReadConfig = { ...readConfig, slaveId };
-      modbusClient.startMonitoring(config, pollingInterval);
-      setIsMonitoring(true);
-      addLog("Info", `Started monitoring (interval: ${pollingInterval}ms)`);
+      return;
     }
+    startPolling(handleRead, pollingInterval);
+    addLog("Info", `Started monitoring (interval: ${pollingInterval}ms)`);
   };
 
   const handleProtocolChange = (newProtocol: ModbusProtocol) => {
+    if (isMonitoring) stopPolling();
     setProtocol(newProtocol);
-    modbusClient.protocol = newProtocol;
     addLog("Info", `Protocol changed to ${newProtocol.toUpperCase()}`);
   };
 
@@ -295,8 +376,8 @@ export function App() {
     }
   };
 
-  const clearLogs = () => {
-    setLogs([]);
+  const clearLogsAndData = () => {
+    clearLogs();
     setData([]);
   };
 
@@ -326,114 +407,14 @@ export function App() {
     }
   }, [logs]);
 
-  const formatValue = (value: number) => {
-    return hexDisplay
-      ? `0x${value.toString(16).toUpperCase().padStart(4, "0")}`
-      : value.toString();
-  };
+  const formatValue = (value: number) =>
+    utilFormatValue(value, { hex: hexDisplay });
 
   // Memoized event handlers to prevent unnecessary re-renders
-  const handleReadFunctionCodeChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLSelectElement;
-    const value = Number(target.value);
-    if (isReadFunctionCode(value)) {
-      setReadConfig((prev) => ({ ...prev, functionCode: value }));
-    } else {
-      console.error("Invalid read function code:", value);
-    }
-  }, []);
-
-  const handleWriteFunctionCodeChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLSelectElement;
-    const value = Number(target.value);
-    if (isWriteFunctionCode(value)) {
-      setWriteConfig((prev) => ({ ...prev, functionCode: value }));
-    } else {
-      console.error("Invalid write function code:", value);
-    }
-  }, []);
-
-  const handleWriteValueChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLInputElement | HTMLTextAreaElement;
-    setWriteConfig((prev) => ({ ...prev, value: target.value }));
-  }, []);
-
-  const handleWriteMultiValuesChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLTextAreaElement;
-    setWriteConfig((prev) => ({ ...prev, multiValues: target.value }));
-  }, []);
-
-  const handleSlaveIdChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLInputElement;
-    setSlaveId(Number(target.value));
-  }, []);
-
-  const handleHexDisplayChange = useCallback((e: Event) => {
-    const target = e.currentTarget as HTMLInputElement;
-    setHexDisplay(target.checked);
-  }, []);
+  // handlers now embedded inside subcomponents
   // Helper functions for multi-write operations
-  const parseCoilValues = (input: string): number[] => {
-    // Parse comma-separated or space-separated bits (0/1)
-    const values = input
-      .split(/[,\s]+/)
-      .map((v) => v.trim())
-      .filter((v) => v !== "")
-      .map((v) => {
-        const num = Number.parseInt(v, 10);
-        if (num !== 0 && num !== 1) {
-          throw new Error(`Invalid coil value: ${v}. Must be 0 or 1.`);
-        }
-        return num;
-      });
-
-    if (values.length === 0) {
-      throw new Error("No coil values provided");
-    }
-    if (values.length > 1968) {
-      throw new Error(`Too many coils: ${values.length}. Maximum is 1968.`);
-    }
-
-    return values;
-  };
-
-  const parseRegisterValues = (input: string): number[] => {
-    // Parse comma-separated, newline-separated, or space-separated register values
-    const values = input
-      .split(/[,\n\s]+/)
-      .map((v) => v.trim())
-      .filter((v) => v !== "")
-      .map((v) => {
-        let num: number;
-        if (hexDisplay && v.startsWith("0x")) {
-          num = Number.parseInt(v, 16);
-        } else if (hexDisplay) {
-          num = Number.parseInt(v, 16);
-        } else {
-          num = Number.parseInt(v, 10);
-        }
-
-        if (Number.isNaN(num) || num < 0 || num > 65535) {
-          throw new Error(`Invalid register value: ${v}. Must be 0-65535.`);
-        }
-        return num;
-      });
-
-    if (values.length === 0) {
-      throw new Error("No register values provided");
-    }
-    if (values.length > 123) {
-      throw new Error(`Too many registers: ${values.length}. Maximum is 123.`);
-    }
-
-    return values;
-  };
-
-  const formatAddress = (address: number) => {
-    return hexDisplay
-      ? `0x${address.toString(16).toUpperCase().padStart(4, "0")}`
-      : address.toString();
-  };
+  const formatAddress = (address: number) =>
+    utilFormatAddress(address, { hex: hexDisplay });
 
   return (
     <div className="container">
@@ -451,471 +432,52 @@ export function App() {
           </span>
         </div>
       </header>
-
-      {/* Port Disconnected Banner */}
       {portDisconnected && (
-        <div className="port-disconnected-banner">
-          <div className="banner-content">
-            <span className="banner-icon">⚠️</span>
-            <div className="banner-text">
-              <strong>Port Disconnected</strong>
-              <p>
-                The serial port was disconnected unexpectedly. This could be due
-                to:
-              </p>
-              <ul>
-                <li>Cable or adapter unplugged</li>
-                <li>Browser permission revoked</li>
-                <li>Device error or power loss</li>
-              </ul>
-            </div>
-            <button
-              className="btn btn-warning"
-              onClick={handleReconnect}
-              type="button"
-            >
-              Reconnect
-            </button>
-          </div>
-        </div>
+        <PortDisconnectedBanner onReconnect={handleReconnect} />
       )}
-
       <main className="main-content">
-        {/* Connection Settings Panel */}
-        <section className="panel connection-panel">
-          <h2>Connection Settings</h2>
-          <div className="form-group">
-            <div className="form-label">Serial Port:</div>
-            <div className="port-controls">
-              <button
-                className="btn btn-primary"
-                disabled={isConnected}
-                onClick={handlePortSelect}
-                type="button"
-              >
-                Select Port
-              </button>
-              <button
-                className="btn btn-success"
-                disabled={!portSelected || isConnected}
-                onClick={handleConnect}
-                type="button"
-              >
-                Connect
-              </button>
-              <button
-                className="btn btn-danger"
-                disabled={!isConnected}
-                onClick={handleDisconnect}
-                type="button"
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="baudRate">Baud Rate:</label>
-              <select
-                disabled={isConnected}
-                id="baudRate"
-                onChange={(e) =>
-                  setSerialConfig((prev: SerialConfig) => ({
-                    ...prev,
-                    baudRate: Number(e.currentTarget.value),
-                  }))
-                }
-                value={serialConfig.baudRate}
-              >
-                <option value={9600}>9600</option>
-                <option value={19200}>19200</option>
-                <option value={38400}>38400</option>
-                <option value={57600}>57600</option>
-                <option value={115200}>115200</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="dataBits">Data Bits:</label>
-              <select
-                disabled={isConnected}
-                id="dataBits"
-                onChange={(e) =>
-                  setSerialConfig((prev: SerialConfig) => ({
-                    ...prev,
-                    dataBits: Number(e.currentTarget.value) as 7 | 8,
-                  }))
-                }
-                value={serialConfig.dataBits}
-              >
-                <option value={7}>7</option>
-                <option value={8}>8</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="parity">Parity:</label>
-              <select
-                disabled={isConnected}
-                id="parity"
-                onChange={(e) =>
-                  setSerialConfig((prev: SerialConfig) => ({
-                    ...prev,
-                    parity: e.currentTarget.value as "none" | "even" | "odd",
-                  }))
-                }
-                value={serialConfig.parity}
-              >
-                <option value="none">None</option>
-                <option value="even">Even</option>
-                <option value="odd">Odd</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="stopBits">Stop Bits:</label>
-              <select
-                disabled={isConnected}
-                id="stopBits"
-                onChange={(e) =>
-                  setSerialConfig((prev: SerialConfig) => ({
-                    ...prev,
-                    stopBits: Number(e.currentTarget.value) as 1 | 2,
-                  }))
-                }
-                value={serialConfig.stopBits}
-              >
-                <option value={1}>1</option>
-                <option value={2}>2</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="slaveId">Slave ID:</label>
-              <input
-                disabled={isConnected}
-                id="slaveId"
-                max="247"
-                min="1"
-                onChange={handleSlaveIdChange}
-                type="number"
-                value={slaveId}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="protocol">Protocol:</label>
-              <select
-                disabled={isConnected}
-                id="protocol"
-                onChange={(e) =>
-                  handleProtocolChange(e.currentTarget.value as ModbusProtocol)
-                }
-                value={protocol}
-              >
-                <option value="rtu">Modbus RTU</option>
-                <option value="ascii">Modbus ASCII</option>
-              </select>
-            </div>
-          </div>
-        </section>
-
-        {/* Read Settings Panel */}
-        <section className="panel read-panel">
-          <h2>Read Data</h2>
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="readFunctionCode">Function Code:</label>
-              <select
-                disabled={!isConnected}
-                id="readFunctionCode"
-                onChange={handleReadFunctionCodeChange}
-                value={readConfig.functionCode}
-              >
-                <option value={1}>01 - Read Coils</option>
-                <option value={2}>02 - Read Discrete Inputs</option>
-                <option value={3}>03 - Read Holding Registers</option>
-                <option value={4}>04 - Read Input Registers</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="startAddress">Start Address:</label>
-              <input
-                disabled={!isConnected}
-                id="startAddress"
-                max="65535"
-                min="0"
-                onChange={(e) =>
-                  setReadConfig((prev) => ({
-                    ...prev,
-                    startAddress: Number(e.currentTarget.value),
-                  }))
-                }
-                type="number"
-                value={readConfig.startAddress}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="quantity">Quantity:</label>
-              <input
-                disabled={!isConnected}
-                id="quantity"
-                max="125"
-                min="1"
-                onChange={(e) =>
-                  setReadConfig((prev) => ({
-                    ...prev,
-                    quantity: Number(e.currentTarget.value),
-                  }))
-                }
-                type="number"
-                value={readConfig.quantity}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="pollingInterval">Polling Interval (ms):</label>
-              <input
-                disabled={!isConnected}
-                id="pollingInterval"
-                max="60000"
-                min="100"
-                onChange={(e) =>
-                  handlePollingIntervalChange(Number(e.currentTarget.value))
-                }
-                type="number"
-                value={pollingInterval}
-              />
-            </div>
-
-            <div className="form-group">
-              <button
-                className="btn btn-primary"
-                disabled={!isConnected || isMonitoring}
-                onClick={handleRead}
-                type="button"
-              >
-                Read Once
-              </button>
-              <button
-                className="btn btn-secondary"
-                disabled={!isConnected}
-                onClick={handleMonitorToggle}
-                type="button"
-              >
-                {isMonitoring ? "Stop Monitor" : "Start Monitor"}
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Write Settings Panel */}
-        <section className="panel write-panel">
-          <h2>Write Data</h2>
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="writeFunctionCode">Function Code:</label>
-              <select
-                disabled={!isConnected}
-                id="writeFunctionCode"
-                onChange={handleWriteFunctionCodeChange}
-                value={writeConfig.functionCode}
-              >
-                <option value={5}>05 - Write Single Coil</option>
-                <option value={6}>06 - Write Single Register</option>
-                <option value={15}>15 - Write Multiple Coils</option>
-                <option value={16}>16 - Write Multiple Registers</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="writeAddress">
-                {writeConfig.functionCode === 15 ||
-                writeConfig.functionCode === 16
-                  ? "Start Address:"
-                  : "Write Address:"}
-              </label>
-              <input
-                disabled={!isConnected}
-                id="writeAddress"
-                max="65535"
-                min="0"
-                onChange={(e) =>
-                  setWriteConfig((prev) => ({
-                    ...prev,
-                    address: Number(e.currentTarget.value),
-                  }))
-                }
-                type="number"
-                value={writeConfig.address}
-              />
-            </div>
-
-            {/* Conditional inputs based on function code */}
-            {(writeConfig.functionCode === 5 ||
-              writeConfig.functionCode === 6) && (
-              <div className="form-group">
-                <label htmlFor="writeValue">Value:</label>
-                <input
-                  disabled={!isConnected}
-                  id="writeValue"
-                  onChange={handleWriteValueChange}
-                  placeholder="e.g. 1234 or 0x04D2"
-                  type="text"
-                  value={writeConfig.value}
-                />
-              </div>
-            )}
-
-            {writeConfig.functionCode === 15 && (
-              <div className="form-group">
-                <label htmlFor="multiCoilValues">Coil Values (0/1):</label>
-                <textarea
-                  disabled={!isConnected}
-                  id="multiCoilValues"
-                  onChange={handleWriteMultiValuesChange}
-                  placeholder="e.g. 1,0,1,1,0 or 1 0 1 1 0 (max 1968 coils)"
-                  rows={3}
-                  value={writeConfig.multiValues}
-                />
-                <small style={{ color: "#666", fontSize: "12px" }}>
-                  Enter comma or space-separated bits (0 or 1). Max 1968 coils.
-                </small>
-              </div>
-            )}
-
-            {writeConfig.functionCode === 16 && (
-              <div className="form-group">
-                <label htmlFor="multiRegisterValues">Register Values:</label>
-                <textarea
-                  disabled={!isConnected}
-                  id="multiRegisterValues"
-                  onChange={handleWriteMultiValuesChange}
-                  placeholder={
-                    hexDisplay
-                      ? "e.g. 0x1234,0x5678 or line-separated (max 123 registers)"
-                      : "e.g. 1234,5678 or line-separated (max 123 registers)"
-                  }
-                  rows={4}
-                  value={writeConfig.multiValues}
-                />
-                <small style={{ color: "#666", fontSize: "12px" }}>
-                  Enter comma, space, or line-separated values (0-65535). Max
-                  123 registers.
-                  {hexDisplay && " Use 0x prefix for hex values."}
-                </small>
-              </div>
-            )}
-
-            <div className="form-group">
-              <button
-                className="btn btn-warning"
-                disabled={
-                  !isConnected ||
-                  (writeConfig.functionCode === 5 ||
-                  writeConfig.functionCode === 6
-                    ? !writeConfig.value
-                    : !writeConfig.multiValues)
-                }
-                onClick={handleWrite}
-                type="button"
-              >
-                Write
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Data Display Panel */}
-        <section className="panel data-panel">
-          <h2>Data Display</h2>
-          <div className="data-controls">
-            <label>
-              <input
-                checked={hexDisplay}
-                onChange={handleHexDisplayChange}
-                type="checkbox"
-              />{" "}
-              Hex Display
-            </label>
-            <button
-              className="btn btn-secondary"
-              onClick={clearLogs}
-              type="button"
-            >
-              Clear Logs
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={copyAllLogs}
-              type="button"
-            >
-              Copy All Logs
-            </button>
-          </div>
-
-          <div className="data-display">
-            <div className="data-table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Type</th>
-                    <th>Address</th>
-                    <th>Value</th>
-                    <th>Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.flatMap((response) =>
-                    response.data.map((value: number, dataIndex: number) => (
-                      <tr
-                        key={`resp-${response.timestamp.getTime()}-addr-${(readConfig.startAddress || 0) + dataIndex}-val-${value}`}
-                      >
-                        <td>{response.functionCodeLabel}</td>
-                        <td>
-                          {formatAddress(
-                            (readConfig.startAddress || 0) + dataIndex,
-                          )}
-                        </td>
-                        <td>{formatValue(value)}</td>
-                        <td>{response.timestamp.toLocaleTimeString()}</td>
-                      </tr>
-                    )),
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="log-container">
-              <h3>Communication Log</h3>
-              <div className="log-display">
-                {logs.map((log, index) => (
-                  <div
-                    className={`log-entry log-${log.type === "Error" ? "error" : log.type === "Sent" ? "sent" : log.type === "Received" ? "received" : "info"}`}
-                    key={`log-${log.timestamp}-${index}`}
-                  >
-                    <span className="log-timestamp">{log.timestamp}</span>
-                    <span className="log-direction">[{log.type}]</span>
-                    <span className="log-data">{log.message}</span>
-                    <button
-                      className="log-copy-btn"
-                      onClick={() => copyLogEntry(log)}
-                      title="Copy this log"
-                      type="button"
-                    >
-                      📋
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
+        <ConnectionSettingsPanel
+          isConnected={isConnected}
+          onConnect={handleConnect}
+          onDisconnect={handleDisconnect}
+          onProtocolChange={handleProtocolChange}
+          onSelectPort={handlePortSelect}
+          onSlaveIdChange={setSlaveId}
+          portSelected={portSelected}
+          protocol={protocol}
+          serialConfig={serialConfig}
+          setSerialConfig={setSerialConfig}
+          slaveId={slaveId}
+        />
+        <ReadPanel
+          isConnected={isConnected}
+          isMonitoring={isMonitoring}
+          onMonitorToggle={handleMonitorToggle}
+          onPollingIntervalChange={handlePollingIntervalChange}
+          onRead={handleRead}
+          pollingInterval={pollingInterval}
+          readConfig={readConfig}
+          setReadConfig={setReadConfig}
+        />
+        <WritePanel
+          hexDisplay={hexDisplay}
+          isConnected={isConnected}
+          onWrite={handleWrite}
+          setWriteConfig={setWriteConfig}
+          writeConfig={writeConfig}
+        />
+        <DataDisplayPanel
+          data={data}
+          formatAddress={formatAddress}
+          formatValue={formatValue}
+          hexDisplay={hexDisplay}
+          logs={logs}
+          onClear={clearLogsAndData}
+          onCopyAll={copyAllLogs}
+          onCopyEntry={copyLogEntry}
+          onHexToggle={(checked) => setHexDisplay(checked)}
+          readStartAddress={readConfig.startAddress}
+        />
       </main>
     </div>
   );
