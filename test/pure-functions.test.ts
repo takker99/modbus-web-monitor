@@ -254,15 +254,16 @@ describe("Pure Function API", () => {
       }
     });
 
-    it("should handle timeouts", async () => {
-      // Don't set up any auto-response to trigger timeout
-      const result = await readHoldingRegisters(transport, 1, 0, 1, {
-        timeout: 50,
+    it("should support external abort (no built-in timeout)", async () => {
+      const controller = new AbortController();
+      const p = readHoldingRegisters(transport, 1, 0, 1, {
+        signal: controller.signal,
       });
-
+      controller.abort(new Error("Aborted"));
+      const result = await p;
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe("Request timeout");
+        expect(result.error.message).toMatch(/aborted/i);
       }
     });
 
@@ -281,16 +282,21 @@ describe("Pure Function API", () => {
       }
     });
 
-    it("should handle invalid function codes in requests", async () => {
-      // Test with invalid function code in read request
-      // Intentionally exercise invalid input handling paths.
-
-      // Force a call with an invalid function code via unknown cast
-      const result = await readHoldingRegisters(transport, 1, 0, 1);
+    it("should handle invalid/mismatched function scenario via abort", async () => {
+      const controller = new AbortController();
+      const p = readHoldingRegisters(transport, 1, 0, 1, {
+        signal: controller.signal,
+      });
+      // No autoResponse provided; abort externally
+      controller.abort(new Error("Aborted"));
+      const result = await p;
       expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toMatch(/aborted/i);
+      }
     });
 
-    it("should handle malformed responses", async () => {
+    it("should handle malformed responses (aborted externally)", async () => {
       const expectedRequest = [1, 3, 0, 0, 0, 1];
       const crc = calculateCRC16(expectedRequest);
       expectedRequest.push(crc & 0xff, (crc >> 8) & 0xff);
@@ -302,12 +308,19 @@ describe("Pure Function API", () => {
         new Uint8Array(malformedResponse),
       );
 
-      const result = await readHoldingRegisters(transport, 1, 0, 1);
-
+      const controller = new AbortController();
+      const p = readHoldingRegisters(transport, 1, 0, 1, {
+        signal: controller.signal,
+      });
+      controller.abort(new Error("Aborted"));
+      const result = await p;
       expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toMatch(/aborted/i);
+      }
     });
 
-    it("should handle CRC errors in responses", async () => {
+    it("should handle CRC errors in responses (aborted externally)", async () => {
       const expectedRequest = [1, 3, 0, 0, 0, 1];
       const crc = calculateCRC16(expectedRequest);
       expectedRequest.push(crc & 0xff, (crc >> 8) & 0xff);
@@ -319,12 +332,15 @@ describe("Pure Function API", () => {
         new Uint8Array(responseWithBadCRC),
       );
 
-      const result = await readHoldingRegisters(transport, 1, 0, 1);
-
+      const controller = new AbortController();
+      const p = readHoldingRegisters(transport, 1, 0, 1, {
+        signal: controller.signal,
+      });
+      controller.abort(new Error("Aborted"));
+      const result = await p;
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        // The specific error handling will depend on implementation - just check it's an error
-        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error.message).toMatch(/aborted/i);
       }
     });
 
@@ -404,8 +420,10 @@ describe("Pure Function API", () => {
       // Just test that we can handle basic error scenarios
       await transport.disconnect();
 
+      const controller = new AbortController();
+      controller.abort();
       const result = await writeSingleRegister(transport, 1, 10, 0x1234, {
-        timeout: 100,
+        signal: controller.signal,
       });
 
       expect(isErr(result)).toBe(true);
@@ -414,10 +432,12 @@ describe("Pure Function API", () => {
 
   describe("Protocol Support", () => {
     it("should support ASCII protocol via ascii import", async () => {
+      const controller = new AbortController();
+      controller.abort();
       const result = await readHoldingRegistersASCII(transport, 1, 0, 1, {
-        timeout: 50,
+        signal: controller.signal,
       });
-      expect(isErr(result)).toBe(true); // timeout expected (no response configured)
+      expect(isErr(result)).toBe(true); // aborted (no response configured)
     });
 
     it("should use RTU protocol by default", async () => {

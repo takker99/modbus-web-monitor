@@ -3,25 +3,25 @@ import { describe, expect, it } from "vitest";
 import { ModbusClient } from "../src/modbus.ts";
 
 describe("ASCII Frame Robustness", () => {
-  it("handles frame start without ending after timeout", async () => {
+  it("handles frame start without ending (user abort)", async () => {
     const client = new ModbusClient();
     client.protocol = "ascii";
-
-    const promise = client.read({
-      functionCode: 3,
-      quantity: 1,
-      slaveId: 1,
-      startAddress: 0,
-    });
-
-    // Send only frame start, never complete it
-    const partialFrame = ":010302";
+    const controller = new AbortController();
+    const promise = client.read(
+      {
+        functionCode: 3,
+        quantity: 1,
+        slaveId: 1,
+        startAddress: 0,
+      },
+      { signal: controller.signal },
+    );
+    const partialFrame = ":010302"; // never completed
     client.handleResponse(
       new Uint8Array(Array.from(partialFrame).map((c) => c.charCodeAt(0))),
     );
-
-    // Should timeout since frame never completes
-    await expect(promise).rejects.toThrow(/Request timed out/);
+    controller.abort(new Error("Aborted"));
+    await expect(promise).rejects.toThrow(/aborted/i);
   });
 
   it("handles ASCII buffer overflow protection", async () => {
@@ -88,25 +88,25 @@ describe("ASCII Frame Robustness", () => {
     expect(response.data).toEqual([10]);
   });
 
-  it("handles invalid frame format without colon", async () => {
+  it("handles invalid frame format without colon (user abort)", async () => {
     const client = new ModbusClient();
     client.protocol = "ascii";
-
-    const promise = client.read({
-      functionCode: 3,
-      quantity: 1,
-      slaveId: 1,
-      startAddress: 0,
-    });
-
-    // Frame without colon start
-    const responseFrame = "010302000AF0\r\n";
+    const controller = new AbortController();
+    const promise = client.read(
+      {
+        functionCode: 3,
+        quantity: 1,
+        slaveId: 1,
+        startAddress: 0,
+      },
+      { signal: controller.signal },
+    );
+    const responseFrame = "010302000AF0\r\n"; // no leading ':'
     client.handleResponse(
       new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0))),
     );
-
-    // Should timeout since no valid frame start
-    await expect(promise).rejects.toThrow(/Request timed out/);
+    controller.abort(new Error("Aborted"));
+    await expect(promise).rejects.toThrow(/aborted/i);
   });
 
   it("handles binary data in ASCII mode", async () => {

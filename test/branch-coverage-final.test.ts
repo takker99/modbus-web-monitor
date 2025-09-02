@@ -90,22 +90,29 @@ describe("Additional branch coverage final", () => {
     expect(true).toBe(true);
   });
 
-  it("ASCII client ignores mismatched function code", async () => {
+  it("ASCII client ignores mismatched function code (aborted externally)", async () => {
     const client = new ModbusASCIIClient();
-    // Start a read to set pendingRequest functionCode=3
-    const p = client.read({
-      functionCode: 3,
-      quantity: 1,
-      slaveId: 1,
-      startAddress: 0,
-    });
-    // Provide a valid FC4 frame (mismatched) which should be ignored; then timeout will reject
+    const controller = new AbortController();
+    // Start a read to set pendingRequest functionCode=3 with external abort signal
+    const p = client.read(
+      {
+        functionCode: 3,
+        quantity: 1,
+        slaveId: 1,
+        startAddress: 0,
+      },
+      { signal: controller.signal },
+    );
+    // Provide a valid FC4 frame (mismatched) which should be ignored; then we abort explicitly
     const payload = [1, 4, 0];
     const lrc = (0 - payload.reduce((a, b) => (a + b) & 0xff, 0)) & 0xff;
     payload.push(lrc);
-    const ascii = `:${payload.map((b) => b.toString(16).padStart(2, "0").toUpperCase()).join("")}\r\n`;
+    const ascii = `:${payload
+      .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
+      .join("")}\r\n`;
     client.handleResponse(new TextEncoder().encode(ascii));
-    await expect(p).rejects.toThrow(/timed out/i);
+    controller.abort(new Error("Aborted"));
+    await expect(p).rejects.toThrow(/aborted/i);
   });
 
   it("ModbusClientBase monitoring success and error paths", async () => {

@@ -1,7 +1,5 @@
-// Transport abstraction for Modbus communication
-// Provides a unified interface for different transport types (Serial, TCP, WebSocket)
-
-import type { EventEmitter } from "../serial.ts";
+// Transport abstraction for Modbus communication (MessagePort-like)
+// EventEmitter を廃止し DOM EventTarget 風 API のみ提供する。
 
 // Transport configuration for different types
 export interface SerialTransportConfig {
@@ -16,7 +14,7 @@ export interface TcpTransportConfig {
   type: "tcp";
   host: string;
   port: number;
-  timeout?: number;
+  // timeout は API から排除 (利用者が AbortSignal を用意)
 }
 
 export interface WebSocketTransportConfig {
@@ -43,41 +41,31 @@ export type TransportState =
   | "connected"
   | "error";
 
-// Transport event types
-export interface TransportEvents extends Record<string, unknown[]> {
-  stateChange: [TransportState];
-  data: [Uint8Array];
-  error: [Error];
-  connect: [];
-  disconnect: [];
+// MessagePort-like events: 'open', 'close', 'statechange', 'message', 'error'
+export interface TransportMessageEvent extends CustomEvent<Uint8Array> {}
+export interface TransportErrorEvent extends CustomEvent<Error> {
+  readonly error: Error;
 }
+export type TransportEventMap = {
+  open: Event;
+  close: Event;
+  statechange: CustomEvent<TransportState>; // detail に新 state
+  message: TransportMessageEvent; // detail に受信データ
+  error: TransportErrorEvent; // detail/error にエラー
+};
 
-// Base transport interface that all transport implementations must follow
-export interface IModbusTransport extends EventEmitter<TransportEvents> {
+export interface IModbusTransport {
   readonly config: TransportConfig;
   readonly state: TransportState;
   readonly connected: boolean;
 
-  // Core transport operations
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  send(data: Uint8Array): Promise<void>;
-
-  // Optional operations for transport-specific functionality
-  reconnect?(): Promise<void>;
-
-  // Event emitter methods (for compatibility)
-  on<K extends keyof TransportEvents>(
-    event: K,
-    listener: (...args: TransportEvents[K]) => void,
-  ): void;
-  off<K extends keyof TransportEvents>(
-    event: K,
-    listener: (...args: TransportEvents[K]) => void,
-  ): void;
-  emit<K extends keyof TransportEvents>(
-    event: K,
-    ...args: TransportEvents[K]
+  postMessage(data: Uint8Array): void;
+  addEventListener<K extends keyof TransportEventMap>(
+    type: K,
+    listener: (ev: TransportEventMap[K]) => void,
+    options?: AddEventListenerOptions,
   ): void;
 }
 

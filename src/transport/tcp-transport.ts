@@ -4,24 +4,19 @@
  * Note: This is a placeholder implementation since Web browsers don't
  * support raw TCP sockets. In Node.js this would use `net.Socket`.
  */
-import { EventEmitter } from "../serial.ts";
 import type {
   IModbusTransport,
   TcpTransportConfig,
-  TransportEvents,
+  TransportEventMap,
   TransportState,
 } from "./transport.ts";
 
-export class TcpTransport
-  extends EventEmitter<TransportEvents>
-  implements IModbusTransport
-{
+export class TcpTransport implements IModbusTransport {
   private _state: TransportState = "disconnected";
   private socket: WebSocket | null = null;
+  private readonly target = new EventTarget();
 
-  constructor(public readonly config: TcpTransportConfig) {
-    super();
-  }
+  constructor(public readonly config: TcpTransportConfig) {}
 
   get state(): TransportState {
     return this._state;
@@ -64,14 +59,14 @@ export class TcpTransport
         this.socket = null;
       }
       this.setState("disconnected");
-      this.emit("disconnect");
+      this.dispatch("close");
     } catch (error) {
       this.setState("error");
       throw error;
     }
   }
 
-  async send(data: Uint8Array): Promise<void> {
+  postMessage(data: Uint8Array): void {
     if (this._state !== "connected") {
       throw new Error("Transport not connected");
     }
@@ -86,7 +81,7 @@ export class TcpTransport
       // This is a simplified implementation
       this.socket.send(data);
     } catch (error) {
-      this.emit("error", error as Error);
+      this.dispatchError(error as Error);
       throw error;
     }
   }
@@ -94,7 +89,28 @@ export class TcpTransport
   private setState(newState: TransportState): void {
     if (this._state !== newState) {
       this._state = newState;
-      this.emit("stateChange", newState);
+      this.dispatch(
+        "statechange",
+        new CustomEvent("statechange", { detail: newState }),
+      );
     }
+  }
+
+  addEventListener<K extends keyof TransportEventMap>(
+    type: K,
+    listener: (ev: TransportEventMap[K]) => void,
+    options?: AddEventListenerOptions,
+  ): void {
+    this.target.addEventListener(type, listener as EventListener, options);
+  }
+  private dispatch(type: keyof TransportEventMap, event?: Event) {
+    this.target.dispatchEvent(event ?? new Event(type));
+  }
+  private dispatchError(error: Error) {
+    const ev = Object.assign(
+      new CustomEvent<Error>("error", { detail: error }),
+      { error },
+    );
+    this.dispatch("error", ev as unknown as Event);
   }
 }

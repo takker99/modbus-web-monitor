@@ -27,7 +27,7 @@ export interface WriteRequest {
   value: number | number[];
 }
 export interface RequestOptions {
-  timeout?: number;
+  signal?: AbortSignal;
 }
 
 export async function readCoils(
@@ -146,7 +146,6 @@ async function executeReadRequest(
   request: ReadRequest,
   options: RequestOptions,
 ): Promise<Result<ModbusResponse, Error>> {
-  const timeout = options.timeout ?? 3000;
   if (!transport.connected) return err(new Error("Transport not connected"));
   try {
     const requestFrame = buildReadRequest(
@@ -163,7 +162,7 @@ async function executeReadRequest(
       requestFrame,
       request.unitId,
       request.functionCode,
-      timeout,
+      options.signal,
     );
     if (!responseResult.success) return responseResult;
     const responseData = responseResult.data;
@@ -196,7 +195,6 @@ async function executeWriteRequest(
   request: WriteRequest,
   options: RequestOptions,
 ): Promise<Result<void, Error>> {
-  const timeout = options.timeout ?? 3000;
   if (!transport.connected) return err(new Error("Transport not connected"));
   try {
     const requestFrame = buildWriteRequest(
@@ -213,7 +211,7 @@ async function executeWriteRequest(
       requestFrame,
       request.unitId,
       request.functionCode,
-      timeout,
+      options.signal,
     );
     if (!responseResult.success) return responseResult;
     return ok(undefined);
@@ -227,15 +225,26 @@ async function sendRTURequestAndWait(
   requestFrame: Uint8Array,
   expectedUnitId: number,
   expectedFunctionCode: number,
-  timeout: number,
+  signal?: AbortSignal,
 ): Promise<Result<Uint8Array, Error>> {
   return new Promise((resolve) => {
-    const timeoutId = setTimeout(() => {
+    if (signal?.aborted) {
+      resolve(
+        err(
+          signal.reason instanceof Error ? signal.reason : new Error("Aborted"),
+        ),
+      );
+      return;
+    }
+    const abortHandler = () => {
       cleanup();
-      resolve(err(new Error("Request timeout")));
-    }, timeout);
+      const reason = signal && (signal as AbortSignal).reason;
+      resolve(err(reason instanceof Error ? reason : new Error("Aborted")));
+    };
     const buffer: number[] = [];
-    const onData = (data: Uint8Array) => {
+    const onMessage = (ev: Event) => {
+      const data = (ev as CustomEvent<Uint8Array>).detail;
+      if (!data) return; // defensive
       buffer.push(...Array.from(data));
       while (buffer.length >= 5) {
         const unitId = buffer[0];
@@ -278,20 +287,34 @@ async function sendRTURequestAndWait(
         break;
       }
     };
-    const onError = (error: Error) => {
+    const onError = (ev: Event) => {
       cleanup();
-      resolve(err(error));
+      const errorEvent = ev as CustomEvent<Error> & { error?: unknown };
+      const possible =
+        (errorEvent.detail as unknown) ??
+        (errorEvent as { error?: unknown }).error;
+      const sourceErr = possible || new Error("Unknown error");
+      resolve(
+        err(
+          sourceErr instanceof Error ? sourceErr : new Error(String(sourceErr)),
+        ),
+      );
     };
     const cleanup = () => {
-      clearTimeout(timeoutId);
-      transport.off("data", onData);
-      transport.off("error", onError);
+      transportRemove();
+      if (signal) signal.removeEventListener("abort", abortHandler);
     };
-    transport.on("data", onData);
-    transport.on("error", onError);
-    transport.send(requestFrame).catch((error) => {
+    const transportRemove = () => {
+      // removeEventListener 未実装のため AbortSignal で一括解除想定 → ここでは no-op
+    };
+    signal?.addEventListener("abort", abortHandler, { once: true });
+    transport.addEventListener("message", onMessage, { signal });
+    transport.addEventListener("error", onError, { signal });
+    try {
+      transport.postMessage(requestFrame);
+    } catch (error) {
       cleanup();
-      resolve(err(error));
-    });
+      resolve(err(error as Error));
+    }
   });
 }

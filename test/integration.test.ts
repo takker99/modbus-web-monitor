@@ -78,26 +78,24 @@ describe("API Integration", () => {
     expect(sentData[1]).toEqual(new Uint8Array(writeRequest));
   });
 
-  it("should handle errors gracefully in both APIs", async () => {
-    // Don't set up any auto-responses to trigger timeouts
-
-    // Test pure function API timeout
+  it("should handle errors gracefully in both APIs (abort driven)", async () => {
+    // Simulate user-driven cancellation instead of implicit timeout
+    const c1 = new AbortController();
+    c1.abort(new Error("Aborted"));
     const readResult = await readHoldingRegisters(transport, 1, 0, 1, {
-      timeout: 50,
+      signal: c1.signal,
     });
     expect(isErr(readResult)).toBe(true);
     if (isErr(readResult)) {
-      expect(readResult.error.message).toBe("Request timeout");
+      expect(readResult.error.message).toMatch(/aborted/i);
     }
 
-    // Test pure function API write timeout
+    const c2 = new AbortController();
+    c2.abort();
     const writeResult = await writeSingleRegister(transport, 1, 0, 123, {
-      timeout: 50,
+      signal: c2.signal,
     });
     expect(isErr(writeResult)).toBe(true);
-    if (isErr(writeResult)) {
-      expect(writeResult.error.message).toBe("Request timeout");
-    }
   });
 
   it("should demonstrate different error handling approaches", async () => {
@@ -166,8 +164,8 @@ describe("API Integration", () => {
     expect(transport.connected).toBe(true);
 
     const stateChanges: string[] = [];
-    transport.on("stateChange", (state) => {
-      stateChanges.push(state);
+    transport.addEventListener("statechange", (e) => {
+      stateChanges.push((e as CustomEvent<string>).detail);
     });
 
     await transport.disconnect();

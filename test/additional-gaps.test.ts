@@ -29,22 +29,24 @@ describe("MockTransport uncovered branches", () => {
     expect(mt.connected).toBe(false);
   });
 
-  it("send before connect rejects", async () => {
+  it("postMessage before connect throws", () => {
     const mt = new MockTransport({ type: "mock" });
-    await expect(mt.send(new Uint8Array([1, 2, 3]))).rejects.toThrow(
+    expect(() => mt.postMessage(new Uint8Array([1, 2, 3]))).toThrow(
       /not connected/,
     );
   });
 
-  it("autoResponses path emits data", async () => {
+  it("autoResponses path emits message event", async () => {
     const mt = new MockTransport({ type: "mock" });
     const req = new Uint8Array([0x01, 0x03, 0x00]);
     const res = new Uint8Array([0x11, 0x22]);
     mt.setAutoResponse(req, res);
     const received: Uint8Array[] = [];
-    mt.on("data", (d) => received.push(d));
+    mt.addEventListener("message", (e) =>
+      received.push((e as CustomEvent<Uint8Array>).detail),
+    );
     await mt.connect();
-    await mt.send(req);
+    mt.postMessage(req);
     await new Promise((r) => setTimeout(r, 5));
     expect(received.length).toBe(1);
     expect(Array.from(received[0])).toEqual([0x11, 0x22]);

@@ -1,11 +1,10 @@
 // Mock transport implementation for testing
 // Provides a controllable transport that can simulate various scenarios
 
-import { EventEmitter } from "../serial.ts";
 import type {
   IModbusTransport,
   MockTransportConfig,
-  TransportEvents,
+  TransportEventMap,
   TransportState,
 } from "./transport.ts";
 
@@ -26,12 +25,10 @@ export interface MockTransportOptions {
   autoResponses?: Map<string, Uint8Array>;
 }
 
-export class MockTransport
-  extends EventEmitter<TransportEvents>
-  implements IModbusTransport
-{
+export class MockTransport implements IModbusTransport {
   private _state: TransportState = "disconnected";
   private options: MockTransportOptions;
+  private readonly target = new EventTarget();
 
   // For testing: manually trigger events
   public sentData: Uint8Array[] = [];
@@ -40,7 +37,6 @@ export class MockTransport
     public readonly config: MockTransportConfig,
     options: MockTransportOptions = {},
   ) {
-    super();
     this.options = {
       autoResponses: new Map(),
       connectDelay: 0,
@@ -80,7 +76,7 @@ export class MockTransport
     }
 
     this.setState("connected");
-    this.emit("connect");
+    this.dispatch("open");
   }
 
   async disconnect(): Promise<void> {
@@ -95,56 +91,54 @@ export class MockTransport
     }
 
     this.setState("disconnected");
-    this.emit("disconnect");
+    this.dispatch("close");
   }
 
-  async send(data: Uint8Array): Promise<void> {
+  postMessage(data: Uint8Array): void {
     if (this._state !== "connected") {
       throw new Error("Transport not connected");
     }
-
-    // Simulate send delay
+    const act = () => {
+      if (this.options.shouldFailSend) {
+        const error = new Error(this.options.errorMessage);
+        this.dispatchError(error);
+        throw error;
+      }
+      this.sentData.push(new Uint8Array(data));
+      const dataKey = Array.from(data).join(",");
+      const response = this.options.autoResponses?.get(dataKey);
+      if (response) {
+        setTimeout(() => {
+          if (this._state === "connected") this.dispatchMessage(response);
+        }, 1);
+      }
+    };
     const sendDelay = this.options.sendDelay ?? 0;
     if (sendDelay > 0) {
-      await this.delay(sendDelay);
-    }
-
-    if (this.options.shouldFailSend) {
-      const error = new Error(this.options.errorMessage);
-      this.emit("error", error);
-      throw error;
-    }
-
-    // Record sent data for testing
-    this.sentData.push(new Uint8Array(data));
-
-    // Check for auto-response
-    const dataKey = Array.from(data).join(",");
-    const response = this.options.autoResponses?.get(dataKey);
-    if (response) {
-      // Emit response after a small delay to simulate real transport
       setTimeout(() => {
-        this.emit("data", response);
-      }, 1);
+        if (this._state === "connected") act();
+      }, sendDelay);
+    } else {
+      act();
     }
   }
 
   // Testing utilities
   public simulateData(data: Uint8Array): void {
     if (this._state === "connected") {
-      this.emit("data", data);
+      this.dispatchMessage(data);
     }
   }
 
   public simulateError(error: Error): void {
     this.setState("error");
-    this.emit("error", error);
+    this.dispatchError(error);
   }
 
   public simulateDisconnect(): void {
     if (this._state === "connected") {
       this.setState("disconnected");
-      this.emit("disconnect");
+      this.dispatch("close");
     }
   }
 
@@ -176,11 +170,37 @@ export class MockTransport
   private setState(newState: TransportState): void {
     if (this._state !== newState) {
       this._state = newState;
-      this.emit("stateChange", newState);
+      this.dispatch(
+        "statechange",
+        new CustomEvent("statechange", { detail: newState }),
+      );
     }
   }
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  addEventListener<K extends keyof TransportEventMap>(
+    type: K,
+    listener: (ev: TransportEventMap[K]) => void,
+    options?: AddEventListenerOptions,
+  ): void {
+    this.target.addEventListener(type, listener as EventListener, options);
+  }
+
+  private dispatch(type: keyof TransportEventMap, event?: Event) {
+    this.target.dispatchEvent(event ?? new Event(type));
+  }
+  private dispatchMessage(data: Uint8Array) {
+    const ev = new CustomEvent<Uint8Array>("message", { detail: data });
+    this.dispatch("message", ev);
+  }
+  private dispatchError(error: Error) {
+    const ev = Object.assign(
+      new CustomEvent<Error>("error", { detail: error }),
+      { error },
+    );
+    this.dispatch("error", ev as unknown as Event);
   }
 }

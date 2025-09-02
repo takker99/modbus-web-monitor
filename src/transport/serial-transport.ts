@@ -1,11 +1,11 @@
 // Serial transport implementation using Web Serial API
 // Wraps the existing SerialManager to implement the IModbusTransport interface
 
-import { EventEmitter, type SerialConfig, SerialManager } from "../serial.ts";
+import { type SerialConfig, SerialManager } from "../serial.ts";
 import type {
   IModbusTransport,
   SerialTransportConfig,
-  TransportEvents,
+  TransportEventMap,
   TransportState,
 } from "./transport.ts";
 
@@ -13,15 +13,12 @@ import type {
  * Serial transport implementation using Web Serial API.
  * Wraps the existing SerialManager to implement the IModbusTransport interface.
  */
-export class SerialTransport
-  extends EventEmitter<TransportEvents>
-  implements IModbusTransport
-{
+export class SerialTransport implements IModbusTransport {
   private serialManager: SerialManager;
   private _state: TransportState = "disconnected";
+  private readonly target = new EventTarget();
 
   constructor(public readonly config: SerialTransportConfig) {
-    super();
     this.serialManager = new SerialManager();
     this.setupSerialManagerEvents();
   }
@@ -75,69 +72,76 @@ export class SerialTransport
     }
   }
 
-  async send(data: Uint8Array): Promise<void> {
+  postMessage(data: Uint8Array): void {
     if (this._state !== "connected") {
       throw new Error("Transport not connected");
     }
 
     try {
-      await this.serialManager.send(data);
+      // underlying serialManager は Promise を返すが上位 API は fire-and-forget
+      void this.serialManager.send(data).catch((error) => {
+        this.dispatchError(error as Error);
+      });
     } catch (error) {
-      this.emit("error", error as Error);
+      this.dispatchError(error as Error);
       throw error;
     }
   }
 
-  async reconnect(): Promise<void> {
-    if (this._state === "connected") {
-      await this.disconnect();
-    }
-
-    const serialConfig: SerialConfig = {
-      baudRate: this.config.baudRate,
-      dataBits: this.config.dataBits,
-      parity: this.config.parity,
-      stopBits: this.config.stopBits,
-    };
-
-    try {
-      await this.serialManager.reconnect(serialConfig);
-    } catch (error) {
-      this.setState("error");
-      throw error;
-    }
-  }
+  // reconnect は新APIでは削除 (必要なら外部で connect/disconnect を連続呼び出し)
 
   private setupSerialManagerEvents(): void {
     this.serialManager.on("connected", () => {
       this.setState("connected");
-      this.emit("connect");
+      this.dispatch("open");
     });
-
     this.serialManager.on("disconnected", () => {
       this.setState("disconnected");
-      this.emit("disconnect");
+      this.dispatch("close");
     });
-
     this.serialManager.on("portDisconnected", () => {
       this.setState("disconnected");
-      this.emit("disconnect");
+      this.dispatch("close");
     });
-
     this.serialManager.on("error", (error: Error) => {
       this.setState("error");
-      this.emit("error", error);
+      this.dispatchError(error);
     });
-
     this.serialManager.on("data", (data: Uint8Array) => {
-      this.emit("data", data);
+      this.dispatchMessage(data);
     });
   }
 
   private setState(newState: TransportState): void {
     if (this._state !== newState) {
       this._state = newState;
-      this.emit("stateChange", newState);
+      this.dispatch(
+        "statechange",
+        new CustomEvent("statechange", { detail: newState }),
+      );
     }
+  }
+
+  addEventListener<K extends keyof TransportEventMap>(
+    type: K,
+    listener: (ev: TransportEventMap[K]) => void,
+    options?: AddEventListenerOptions,
+  ): void {
+    this.target.addEventListener(type, listener as EventListener, options);
+  }
+
+  private dispatch(type: keyof TransportEventMap, event?: Event) {
+    this.target.dispatchEvent(event ?? new Event(type));
+  }
+  private dispatchMessage(data: Uint8Array) {
+    const ev = new CustomEvent<Uint8Array>("message", { detail: data });
+    this.dispatch("message", ev);
+  }
+  private dispatchError(error: Error) {
+    const ev = Object.assign(
+      new CustomEvent<Error>("error", { detail: error }),
+      { error },
+    );
+    this.dispatch("error", ev as unknown as Event);
   }
 }

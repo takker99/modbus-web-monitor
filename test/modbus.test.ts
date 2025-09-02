@@ -296,18 +296,23 @@ describe("Response parsing", () => {
     await expect(promise).rejects.toThrow(/Illegal data address/);
   });
 
-  it("times out when no response", async () => {
+  it("aborts when no response (external cancellation)", async () => {
     vi.useFakeTimers();
     const client = new ModbusClient();
-    const promise = client.read({
-      functionCode: 3,
-      quantity: 1,
-      slaveId: 1,
-      startAddress: 0,
-    });
-    // Fast-forward timers
+    const controller = new AbortController();
+    const promise = client.read(
+      {
+        functionCode: 3,
+        quantity: 1,
+        slaveId: 1,
+        startAddress: 0,
+      },
+      { signal: controller.signal },
+    );
+    // Simulate user-defined timeout via external AbortController
+    setTimeout(() => controller.abort(new Error("Aborted")), 3000);
     vi.advanceTimersByTime(3005);
-    await expect(promise).rejects.toThrow(/timed out/);
+    await expect(promise).rejects.toThrow(/aborted/i);
     vi.useRealTimers();
   });
 });

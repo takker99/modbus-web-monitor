@@ -14,7 +14,7 @@ Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Ser
 - Hex or decimal display toggle for register values & addresses
 - Real‑time communication log (TX/RX) with copy single / copy all and automatic trimming
 - CRC16 (RTU) and LRC (ASCII) validation for frame integrity
-- Simple buffering & response correlation with timeout handling
+- Simple buffering & response correlation (caller-controlled cancellation via AbortSignal)
 - Clean, responsive UI (desktop & mobile)
 
 ## Coverage
@@ -76,7 +76,7 @@ interface ModbusReadConfig {
 }
 
 interface ModbusWriteConfig {
-  functionCode: WriteFunctionCode  // Only 5|6|15|16 allowed  
+  functionCode: WriteFunctionCode  // Only 5|6|15|16 allowed
   // ... other properties
 }
 ```
@@ -128,7 +128,7 @@ pnpm preview
 4. Press "Connect".
 5. For a single read: choose a function code (e.g. Holding Registers = FC03), start address, and quantity; click "Read".
 6. To start periodic polling: click "Start Monitor" (click again to stop). Default interval is 1000 ms; adjust in `App.tsx` or `modbus.ts` if needed.
-7. To write: 
+7. To write:
    - **Single writes (FC05/06)**: Select function (05 coil / 06 single register), address, and value (prefix with `0x` for hex) then click "Write".
    - **Multi-coil writes (FC15)**: Select "15 - Write Multiple Coils", enter start address, and provide comma or space-separated coil values (0 or 1). Max 1968 coils.
    - **Multi-register writes (FC16)**: Select "16 - Write Multiple Registers", enter start address, and provide comma/space/line-separated register values (0-65535). Max 123 registers.
@@ -186,7 +186,7 @@ The FC06 interface allows you to write a single register value. Enter the regist
 
 The FC15 interface allows you to write multiple coils at once. Enter coil values as comma or space-separated bits (0 or 1), with a maximum of 1968 coils.
 
-### FC16 - Write Multiple Registers Interface  
+### FC16 - Write Multiple Registers Interface
 
 ![FC16 Multi-Register Write Interface](https://github.com/user-attachments/assets/812d1fb4-328f-4f5e-b04d-e2f05985c36c)
 
@@ -233,16 +233,32 @@ Example read request (FC03):
 The ASCII implementation handles:
 - Proper frame detection (`:` start, `\r\n` end)
 - Hex decoding with validation
-- LRC calculation and verification  
+- LRC calculation and verification
 - Buffer management for partial/concatenated frames
 - Error handling identical to RTU (LRC mismatch triggers error event)
 
-## Error / Exception Handling
+## Error / Exception Handling & Cancellation
 
 - Pending request queue: only one outstanding at a time; attempts while busy reject.
-- 3 second timeout clears pending state.
+- No built-in timeout: callers decide cancellation policy (UI or integrations use AbortController).
+- Abort with `AbortController` (`client.read(cfg, { signal })`) to cancel an in‑flight request.
 - On Modbus exception (function | 0x80), the code is mapped and surfaced in logs.
-- CRC mismatch triggers an error and buffer reset for that frame.
+- CRC / LRC mismatch triggers an error and buffer reset (RTU attempts limited resync; ASCII clears buffer).
+
+### Example: Manual Timeout Using AbortController
+
+```ts
+const controller = new AbortController();
+const timer = setTimeout(() => controller.abort(new Error("Aborted")), 1500);
+try {
+  const res = await client.read({ slaveId:1, functionCode:3, startAddress:0, quantity:10 }, { signal: controller.signal });
+  console.log(res.data);
+} catch (e) {
+  console.error("Read aborted:", (e as Error).message);
+} finally {
+  clearTimeout(timer);
+}
+```
 
 ## Troubleshooting
 
@@ -337,13 +353,13 @@ This application provides full support for standard Modbus read and write operat
 
 ### Read Operations
 - **FC01 - Read Coils**: Digital outputs/coils status (read/write bits)
-- **FC02 - Read Discrete Inputs**: Digital inputs status (read-only bits)  
+- **FC02 - Read Discrete Inputs**: Digital inputs status (read-only bits)
 - **FC03 - Read Holding Registers**: Analog/data registers (read/write registers)
 - **FC04 - Read Input Registers**: Input/measurement registers (read-only registers)
 
 ### Write Operations
 - **FC05 - Write Single Coil**: Write single digital output
-- **FC06 - Write Single Register**: Write single analog/data register  
+- **FC06 - Write Single Register**: Write single analog/data register
 - **FC15 - Write Multiple Coils**: Write multiple digital outputs (up to 1968 coils)
 - **FC16 - Write Multiple Registers**: Write multiple registers (up to 123 registers)
 
@@ -379,14 +395,14 @@ This project has comprehensive test coverage for the Modbus protocol implementat
 ### Test Categories
 
 - **Unit Tests** (`test/modbus.test.ts`) - Core protocol functionality, CRC/LRC calculations, frame building
-- **Fuzzing Tests** (`test/modbus-fuzzing.test.ts`) - Property-based testing with random frame generation 
-- **Timing Tests** (`test/modbus-timing.test.ts`) - Timeout handling, race conditions, overlapping requests
+- **Fuzzing Tests** (`test/modbus-fuzzing.test.ts`) - Property-based testing with random frame generation
+- **Timing Tests** (`test/modbus-timing.test.ts`) - Abort handling (replaces legacy internal timeout), race conditions, overlapping requests
 - **UI Tests** (`test/ui-parsing.test.ts`) - Input validation and parsing logic
 
 ### Coverage Requirements
 
 - **Statements**: 90% (currently 93.64%)
-- **Branches**: 85% (currently 87.96%) 
+- **Branches**: 85% (currently 87.96%)
 - **Lines**: 90% (currently 93.64%)
 - **Functions**: 90% (currently 100%)
 
@@ -409,13 +425,13 @@ pnpm test test/modbus.test.ts
 ### Test Features
 
 - **Property-based testing** with fast-check for robust frame validation
-- **Fake timers** for deterministic timeout testing  
+- **Fake timers** for deterministic timeout testing
 - **Frame fuzzing** with up to 200 random corrupted frames per test
 - **Buffer boundary testing** with frame chunking scenarios
 - **ASCII and RTU protocol coverage** including error paths
 - **Race condition prevention** testing for concurrent requests
 
-The test suite validates that the Modbus implementation handles malformed frames gracefully without crashes and properly manages request timeouts and overlapping requests.
+The test suite validates that the Modbus implementation handles malformed frames gracefully without crashes and properly manages external abort-driven cancellations and overlapping requests.
 
 The project includes a comprehensive CI pipeline that:
 - Tests across Node.js versions 18, 20, and 22

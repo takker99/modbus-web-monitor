@@ -76,12 +76,24 @@ export class ModbusClient extends EventEmitter<ModbusClientEvents> {
     return this.#protocol;
   }
 
-  async read(config: ModbusReadConfig): Promise<ModbusResponse> {
-    return this.#getActiveClient().read(config as BaseModbusReadConfig);
+  async read(
+    config: ModbusReadConfig,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<ModbusResponse> {
+    return this.#getActiveClient().read(
+      config as BaseModbusReadConfig,
+      options,
+    );
   }
 
-  async write(config: ModbusWriteConfig): Promise<void> {
-    return this.#getActiveClient().write(config as BaseModbusWriteConfig);
+  async write(
+    config: ModbusWriteConfig,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<void> {
+    return this.#getActiveClient().write(
+      config as BaseModbusWriteConfig,
+      options,
+    );
   }
 
   startMonitoring(config: ModbusReadConfig, interval = 1000) {

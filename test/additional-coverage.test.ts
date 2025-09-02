@@ -135,3 +135,31 @@ describe("SerialManager negative paths", () => {
     ).rejects.toThrow(/Already connected/);
   });
 });
+
+import { readHoldingRegisters as readHoldingRegistersRTU } from "../src/api/rtu.ts";
+// Extra abort pre-check coverage for pure function APIs
+import { MockTransport } from "../src/transport/mock-transport.ts";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+describe("Abort pre-check coverage", () => {
+  it("aborted signal before send returns aborted error (rtu & ascii)", async () => {
+    const transport = new MockTransport({ name: "extra", type: "mock" });
+    await transport.connect();
+    const c = new AbortController();
+    c.abort(new Error("Aborted"));
+    const rtuResult = await readHoldingRegistersRTU(transport, 1, 0, 1, {
+      signal: c.signal,
+    });
+    const asciiModule = await import("../src/api/ascii.ts");
+    const asciiResult = await asciiModule.readHoldingRegisters(
+      transport,
+      1,
+      0,
+      1,
+      { signal: c.signal },
+    );
+    expect(rtuResult.success).toBe(false);
+    expect(asciiResult.success).toBe(false);
+  });
+});
+/* eslint-enable @typescript-eslint/no-explicit-any */

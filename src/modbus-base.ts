@@ -1,4 +1,4 @@
-import { ModbusBusyError, ModbusTimeoutError } from "./errors.ts";
+import { ModbusBusyError } from "./errors.ts";
 import type { ModbusProtocol } from "./frameBuilder.ts";
 import { FUNCTION_CODE_LABELS, isValidFunctionCode } from "./functionCodes.ts";
 import { EventEmitter } from "./serial.ts";
@@ -66,7 +66,7 @@ export abstract class ModbusClientBase extends EventEmitter<ModbusClientEvents> 
     functionCode: number;
     resolve: (response: ModbusResponse) => void;
     reject: (error: Error) => void;
-    timeout: ReturnType<typeof setTimeout>;
+    abortController: AbortController;
   } | null = null;
 
   /** Interval id used by startMonitoring/stopMonitoring. */
@@ -79,7 +79,10 @@ export abstract class ModbusClientBase extends EventEmitter<ModbusClientEvents> 
    * Execute a Modbus read operation. Returns a promise that resolves with
    * a `ModbusResponse` or rejects with an error (busy/timeout/transport).
    */
-  async read(config: ModbusReadConfig): Promise<ModbusResponse> {
+  async read(
+    config: ModbusReadConfig,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<ModbusResponse> {
     return new Promise((resolve, reject) => {
       if (this.pendingRequest) {
         reject(new ModbusBusyError());
@@ -87,15 +90,35 @@ export abstract class ModbusClientBase extends EventEmitter<ModbusClientEvents> 
       }
 
       const request = this.buildReadRequest(config);
+      const controller = new AbortController();
+      const outer = options.signal;
+      if (outer) {
+        if (outer.aborted) {
+          reject(
+            outer.reason instanceof Error ? outer.reason : new Error("Aborted"),
+          );
+          return;
+        }
+        const onAbort = () => {
+          if (this.pendingRequest) {
+            const err =
+              outer.reason instanceof Error
+                ? outer.reason
+                : new Error("Aborted");
+            this.rejectPendingRequest(err);
+          }
+        };
+        outer.addEventListener("abort", onAbort, {
+          once: true,
+          signal: controller.signal,
+        });
+      }
       this.pendingRequest = {
+        abortController: controller,
         functionCode: config.functionCode,
         reject,
         resolve,
         slaveId: config.slaveId,
-        timeout: setTimeout(() => {
-          this.pendingRequest = null;
-          reject(new ModbusTimeoutError());
-        }, 3000),
       };
 
       this.emit("request", request);
@@ -110,7 +133,10 @@ export abstract class ModbusClientBase extends EventEmitter<ModbusClientEvents> 
    * Execute a Modbus write operation. Promise resolves when the write
    * response is received; resolves to void for API consistency.
    */
-  async write(config: ModbusWriteConfig): Promise<void> {
+  async write(
+    config: ModbusWriteConfig,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.pendingRequest) {
         reject(new ModbusBusyError());
@@ -118,15 +144,35 @@ export abstract class ModbusClientBase extends EventEmitter<ModbusClientEvents> 
       }
 
       const request = this.buildWriteRequest(config);
+      const controller = new AbortController();
+      const outer = options.signal;
+      if (outer) {
+        if (outer.aborted) {
+          reject(
+            outer.reason instanceof Error ? outer.reason : new Error("Aborted"),
+          );
+          return;
+        }
+        const onAbort = () => {
+          if (this.pendingRequest) {
+            const err =
+              outer.reason instanceof Error
+                ? outer.reason
+                : new Error("Aborted");
+            this.rejectPendingRequest(err);
+          }
+        };
+        outer.addEventListener("abort", onAbort, {
+          once: true,
+          signal: controller.signal,
+        });
+      }
       this.pendingRequest = {
+        abortController: controller,
         functionCode: config.functionCode,
         reject,
         resolve: () => resolve(),
         slaveId: config.slaveId,
-        timeout: setTimeout(() => {
-          this.pendingRequest = null;
-          reject(new ModbusTimeoutError());
-        }, 3000),
       };
 
       this.emit("request", request);
@@ -195,7 +241,6 @@ export abstract class ModbusClientBase extends EventEmitter<ModbusClientEvents> 
   protected completePendingRequest(response: ModbusResponse) {
     if (!this.pendingRequest) return;
 
-    clearTimeout(this.pendingRequest.timeout);
     this.pendingRequest.resolve(response);
     this.pendingRequest = null;
   }
@@ -204,7 +249,6 @@ export abstract class ModbusClientBase extends EventEmitter<ModbusClientEvents> 
   protected rejectPendingRequest(error: Error) {
     if (!this.pendingRequest) return;
 
-    clearTimeout(this.pendingRequest.timeout);
     this.pendingRequest.reject(error);
     this.pendingRequest = null;
   }

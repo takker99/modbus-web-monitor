@@ -10,6 +10,9 @@
   },
   "chat.tools.terminal.autoApprove": {
     "cd": true,
+    "grep": true,
+    "head": true,
+    "tail": true,
     "pnpm run check": true,
     "pnpm run fix": true,
     "pnpm check": true,

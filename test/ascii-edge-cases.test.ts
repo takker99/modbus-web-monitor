@@ -48,25 +48,20 @@ describe("ASCII Edge Cases Analysis", () => {
     expect(response.data).toEqual([10]);
   });
 
-  it("handles frame without proper ending", async () => {
+  it("allows caller to abort incomplete frame (no implicit timeout)", async () => {
     const client = new ModbusClient();
     client.protocol = "ascii";
-
-    const promise = client.read({
-      functionCode: 3,
-      quantity: 1,
-      slaveId: 1,
-      startAddress: 0,
-    });
-
-    // Frame without \r\n ending - should timeout
-    const responseFrame = ":010302000AF0";
+    const controller = new AbortController();
+    const promise = client.read(
+      { functionCode: 3, quantity: 1, slaveId: 1, startAddress: 0 },
+      { signal: controller.signal },
+    );
+    const responseFrame = ":010302000AF0"; // missing CRLF so never completes
     client.handleResponse(
       new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0))),
     );
-
-    // This should timeout since frame never completes
-    await expect(promise).rejects.toThrow(/Request timed out/);
+    controller.abort();
+    await expect(promise).rejects.toThrow(/aborted/i);
   });
 
   it("handles odd number of hex characters", async () => {
@@ -116,24 +111,19 @@ describe("ASCII Edge Cases Analysis", () => {
     expect(calculatedLRC).toBe(0xf0);
   });
 
-  it("handles frames with only noise", async () => {
+  it("caller can abort when only noise is received", async () => {
     const client = new ModbusClient();
     client.protocol = "ascii";
-
-    const promise = client.read({
-      functionCode: 3,
-      quantity: 1,
-      slaveId: 1,
-      startAddress: 0,
-    });
-
-    // Only noise, no valid frame
-    const responseFrame = "ABCDEFGHIJ123456";
+    const controller = new AbortController();
+    const promise = client.read(
+      { functionCode: 3, quantity: 1, slaveId: 1, startAddress: 0 },
+      { signal: controller.signal },
+    );
+    const responseFrame = "ABCDEFGHIJ123456"; // noise
     client.handleResponse(
       new Uint8Array(Array.from(responseFrame).map((c) => c.charCodeAt(0))),
     );
-
-    // Should timeout waiting for frame
-    await expect(promise).rejects.toThrow(/Request timed out/);
+    controller.abort(new Error("Aborted"));
+    await expect(promise).rejects.toThrow(/aborted/i);
   });
 });

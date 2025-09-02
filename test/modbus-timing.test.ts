@@ -12,98 +12,73 @@ describe("Timing Edge Case Tests", () => {
     vi.useRealTimers();
   });
 
-  describe("Timeout Handling", () => {
-    it("rejects request after timeout", async () => {
+  describe("Abort Handling (replaces legacy internal timeout)", () => {
+    it("rejects request when aborted", async () => {
       const client = new ModbusClient();
-
-      const promise = client.read({
-        functionCode: 3,
-        quantity: 1,
-        slaveId: 1,
-        startAddress: 0,
-      });
-
-      // Fast forward past the 3000ms timeout
-      vi.advanceTimersByTime(3001);
-
-      await expect(promise).rejects.toThrow("Request timed out");
+      const controller = new AbortController();
+      const promise = client.read(
+        {
+          functionCode: 3,
+          quantity: 1,
+          slaveId: 1,
+          startAddress: 0,
+        },
+        { signal: controller.signal },
+      );
+      controller.abort(new Error("Aborted"));
+      await expect(promise).rejects.toThrow(/aborted/i);
     });
 
-    it("discards late frame after timeout", async () => {
+    it("ignores late frame after abort", async () => {
       const client = new ModbusClient();
-
-      // Start a request
-      const promise = client.read({
-        functionCode: 3,
-        quantity: 1,
-        slaveId: 1,
-        startAddress: 0,
-      });
-
-      // Advance time to trigger timeout
-      vi.advanceTimersByTime(3001);
-
-      // Verify the request timed out
-      await expect(promise).rejects.toThrow("Request timed out");
-
-      // Now send a response that arrives "late"
+      const controller = new AbortController();
+      const promise = client.read(
+        {
+          functionCode: 3,
+          quantity: 1,
+          slaveId: 1,
+          startAddress: 0,
+        },
+        { signal: controller.signal },
+      );
+      controller.abort();
+      await expect(promise).rejects.toThrow(/aborted/i);
       const frame = [1, 3, 2, 0x12, 0x34];
       const crc = calculateCRC16(frame);
       frame.push(crc & 0xff, (crc >> 8) & 0xff);
-
-      // This should be ignored (no crash, no new response)
       const responseSpy = vi.fn();
       client.on("response", responseSpy);
-
-      expect(() => {
-        client.handleResponse(new Uint8Array(frame));
-      }).not.toThrow();
-
-      // No response should be emitted since there's no pending request
+      expect(() => client.handleResponse(new Uint8Array(frame))).not.toThrow();
       expect(responseSpy).not.toHaveBeenCalled();
     });
 
-    it("handles multiple timeout scenarios in sequence", async () => {
+    it("handles multiple abort scenarios in sequence", async () => {
       const client = new ModbusClient();
-
-      // First request times out
-      const promise1 = client.read({
-        functionCode: 3,
-        quantity: 1,
-        slaveId: 1,
-        startAddress: 0,
-      });
-
-      vi.advanceTimersByTime(3001);
-      await expect(promise1).rejects.toThrow("Request timed out");
-
-      // Second request also times out
-      const promise2 = client.read({
-        functionCode: 3,
-        quantity: 1,
-        slaveId: 1,
-        startAddress: 10,
-      });
-
-      vi.advanceTimersByTime(3001);
-      await expect(promise2).rejects.toThrow("Request timed out");
-
-      // Third request succeeds before timeout
-      const promise3 = client.read({
+      const c1 = new AbortController();
+      const p1 = client.read(
+        { functionCode: 3, quantity: 1, slaveId: 1, startAddress: 0 },
+        { signal: c1.signal },
+      );
+      c1.abort();
+      await expect(p1).rejects.toThrow(/aborted/i);
+      const c2 = new AbortController();
+      const p2 = client.read(
+        { functionCode: 3, quantity: 1, slaveId: 1, startAddress: 10 },
+        { signal: c2.signal },
+      );
+      c2.abort(new Error("User abort"));
+      await expect(p2).rejects.toThrow(/User abort/);
+      const p3 = client.read({
         functionCode: 3,
         quantity: 1,
         slaveId: 1,
         startAddress: 20,
       });
-
-      // Send response before timeout
       const frame = [1, 3, 2, 0x99, 0xaa];
       const crc = calculateCRC16(frame);
       frame.push(crc & 0xff, (crc >> 8) & 0xff);
-
       client.handleResponse(new Uint8Array(frame));
-
-      const response = await promise3;
+      const response = await p3;
       expect(response.data).toEqual([0x99aa]);
     });
   });
@@ -179,19 +154,15 @@ describe("Timing Edge Case Tests", () => {
       expect(response2.data).toEqual([0x5678]);
     });
 
-    it("allows new request after first times out", async () => {
+    it("allows new request after first aborted", async () => {
       const client = new ModbusClient();
-
-      // First request times out
-      const promise1 = client.read({
-        functionCode: 3,
-        quantity: 1,
-        slaveId: 1,
-        startAddress: 0,
-      });
-
-      vi.advanceTimersByTime(3001);
-      await expect(promise1).rejects.toThrow("Request timed out");
+      const controller = new AbortController();
+      const promise1 = client.read(
+        { functionCode: 3, quantity: 1, slaveId: 1, startAddress: 0 },
+        { signal: controller.signal },
+      );
+      controller.abort();
+      await expect(promise1).rejects.toThrow(/aborted/i);
 
       // Second request should now be allowed
       const promise2 = client.read({
@@ -305,27 +276,17 @@ describe("Timing Edge Case Tests", () => {
       expect(response2.data).toEqual([0x99aa]);
     });
 
-    it("handles timeout occurring during response processing", async () => {
+    it("handles abort occurring during response processing", async () => {
       const client = new ModbusClient();
-
-      const promise = client.read({
-        functionCode: 3,
-        quantity: 1,
-        slaveId: 1,
-        startAddress: 0,
-      });
-
-      // Send partial frame first
-      client.handleResponse(new Uint8Array([1, 3, 2, 0x12]));
-
-      // Advance time to cause timeout
-      vi.advanceTimersByTime(3001);
-
-      // Complete the frame after timeout
-      client.handleResponse(new Uint8Array([0x34, 0, 0])); // Wrong CRC intentionally
-
-      // Should still timeout despite late frame
-      await expect(promise).rejects.toThrow("Request timed out");
+      const controller = new AbortController();
+      const promise = client.read(
+        { functionCode: 3, quantity: 1, slaveId: 1, startAddress: 0 },
+        { signal: controller.signal },
+      );
+      client.handleResponse(new Uint8Array([1, 3, 2, 0x12])); // partial
+      controller.abort();
+      client.handleResponse(new Uint8Array([0x34, 0, 0])); // late / invalid remainder
+      await expect(promise).rejects.toThrow(/aborted/i);
     });
   });
 

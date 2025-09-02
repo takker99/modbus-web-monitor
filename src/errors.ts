@@ -61,14 +61,6 @@ export class ModbusFrameError extends ModbusError {
   }
 }
 
-/** Error for request timeouts. */
-export class ModbusTimeoutError extends ModbusError {
-  constructor() {
-    super("Request timed out");
-    this.name = "ModbusTimeoutError";
-  }
-}
-
 /** Error for concurrent request attempts. */
 export class ModbusBusyError extends ModbusError {
   constructor() {

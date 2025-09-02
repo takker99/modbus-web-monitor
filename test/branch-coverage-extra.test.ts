@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { calculateCRC16 } from "../src/crc.ts";
 import { parseRTUFrame, validateRTUFrame } from "../src/frameParser.ts";
 import { ModbusASCIIClient } from "../src/modbus-ascii.ts";
@@ -25,10 +25,10 @@ describe("MockTransport failure branches", () => {
     const mt = new MockTransport({ type: "mock" }, { shouldFailConnect: true });
     await expect(mt.connect()).rejects.toThrow(/Mock transport error/);
   });
-  it("send failure branch", async () => {
+  it("postMessage failure branch throws", async () => {
     const mt = new MockTransport({ type: "mock" }, { shouldFailSend: true });
     await mt.connect();
-    await expect(mt.send(new Uint8Array([1]))).rejects.toThrow(
+    expect(() => mt.postMessage(new Uint8Array([1]))).toThrow(
       /Mock transport error/,
     );
   });
@@ -94,9 +94,10 @@ describe("ModbusASCIIClient parse edge branches", () => {
   it("invalid hex pair error", async () => {
     const c = createClient();
     const p = c.read(readCfg).catch((e) => e);
+    // Provide CRLF termination to trigger processing
     c.handleResponse(
       new Uint8Array(
-        Array.from(":0103ZZ".split("").map((c) => c.charCodeAt(0))),
+        Array.from(":0103ZZ\r\n".split("").map((ch) => ch.charCodeAt(0))),
       ),
     );
     const err = await p;
@@ -127,19 +128,5 @@ describe("ModbusASCIIClient parse edge branches", () => {
     expect(err).toBeInstanceOf(Error);
   });
 
-  it("read timeout branch triggers ModbusTimeoutError", async () => {
-    vi.useFakeTimers();
-    const c = createClient();
-    const promise = c.read(readCfg).catch((e) => e);
-    // advance just before then after 3s
-    vi.advanceTimersByTime(2999);
-    expect(
-      await Promise.race([promise, Promise.resolve(Symbol("pending"))]),
-    ).not.toBeInstanceOf(Error);
-    vi.advanceTimersByTime(2); // cross 3000ms boundary
-    const err = await promise;
-    vi.useRealTimers();
-    expect(err).toBeInstanceOf(Error);
-    expect(String(err.message)).toMatch(/timed out/i);
-  });
+  // Internal timeout logic removed; read now relies on external AbortSignal, so no internal timeout test here.
 });

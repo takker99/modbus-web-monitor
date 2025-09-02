@@ -36,18 +36,18 @@ TransportRegistry.register("mock", (config) => {
 export { MockTransport, type MockTransportOptions } from "./mock-transport.ts";
 export { SerialTransport } from "./serial-transport.ts";
 export { TcpTransport } from "./tcp-transport.ts";
-// Re-export transport types and implementations for consumers
 export type {
   IModbusTransport,
   MockTransportConfig,
   SerialTransportConfig,
   TcpTransportConfig,
   TransportConfig,
-  TransportEvents,
+  TransportEventMap,
   TransportFactory,
   TransportState,
   WebSocketTransportConfig,
 } from "./transport.ts";
+// Re-export transport types and implementations for consumers
 export { TransportRegistry } from "./transport.ts";
 
 // Convenience helper to create transports via the registry

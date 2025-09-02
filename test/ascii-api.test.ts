@@ -107,14 +107,16 @@ describe("ASCII API full coverage", () => {
     expect(res.error).toBeInstanceOf(ModbusExceptionError);
   });
 
-  it("timeout", async () => {
-    // No auto response set -> expect timeout
-    const res = await ascii.readInputRegisters(transport, 1, 0x0000, 1, {
-      timeout: 30,
+  it("abort via AbortController (no implicit timeout)", async () => {
+    const controller = new AbortController();
+    const promise = ascii.readInputRegisters(transport, 1, 0x0000, 1, {
+      signal: controller.signal,
     });
+    controller.abort(new Error("Aborted"));
+    const res = await promise;
     expect(res.success).toBe(false);
     if (!res.success) {
-      expect(res.error.message).toMatch(/timeout/i);
+      expect(res.error.message).toMatch(/Aborted/);
     }
   });
 });
