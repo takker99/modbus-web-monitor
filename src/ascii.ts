@@ -9,7 +9,7 @@ import {
   type Result,
   unwrapOk,
 } from "option-t/plain_result";
-import { type MODBUS_EXCEPTION_CODES, ModbusExceptionError } from "./errors.ts";
+import { ModbusExceptionError } from "./errors.ts";
 import { buildReadRequest, buildWriteRequest } from "./frameBuilder.ts";
 import {
   parseBitData,
@@ -262,13 +262,7 @@ async function send(
             if (functionCode & 0x80) {
               const errorCode = frame[2];
               cleanup();
-              resolve(
-                createErr(
-                  new ModbusExceptionError(
-                    errorCode as keyof typeof MODBUS_EXCEPTION_CODES,
-                  ),
-                ),
-              );
+              resolve(createErr(new ModbusExceptionError(errorCode)));
               return;
             }
             cleanup();

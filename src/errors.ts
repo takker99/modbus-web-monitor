@@ -1,7 +1,6 @@
 /**
  * Unified error types and exception code mapping for Modbus operations.
  */
-
 /** Modbus exception codes as defined in the specification. */
 export const MODBUS_EXCEPTION_CODES = {
   1: "Illegal function",
@@ -15,58 +14,44 @@ export const MODBUS_EXCEPTION_CODES = {
   11: "Gateway target device failed to respond",
 } as const;
 
-/** Base error class for Modbus-related errors. */
-export class ModbusError extends Error {
-  constructor(
-    message: string,
-    public readonly code?: number,
-  ) {
-    super(message);
-    this.name = "ModbusError";
-  }
-}
+/** Modbus exception codes as defined in the specification. */
+export type ExceptionCode = keyof typeof MODBUS_EXCEPTION_CODES;
 
 /** Error for Modbus exception responses (function code | 0x80). */
-export class ModbusExceptionError extends ModbusError {
+export class ModbusExceptionError extends Error {
+  name = "ModbusExceptionError" as const;
+
   constructor(
-    public readonly exceptionCode: keyof typeof MODBUS_EXCEPTION_CODES,
+    public readonly code: number,
+    options?: ErrorOptions,
   ) {
-    const message =
-      MODBUS_EXCEPTION_CODES[exceptionCode] ||
-      `Unknown exception ${exceptionCode}`;
-    super(`${message} (code: ${exceptionCode})`, exceptionCode);
-    this.name = "ModbusExceptionError";
+    const message = Object.hasOwn(MODBUS_EXCEPTION_CODES, code)
+      ? MODBUS_EXCEPTION_CODES[code as ExceptionCode]
+      : (`Unknown exception ${code}` as const);
+    super(`${message} (code: ${code})`, options);
   }
 }
 
 /** Error for CRC validation failures. */
-export class ModbusCRCError extends ModbusError {
-  constructor() {
-    super("CRC error");
-    this.name = "ModbusCRCError";
+export class ModbusCRCError extends Error {
+  name = "ModbusCRCError" as const;
+  constructor(options?: ErrorOptions) {
+    super("CRC error", options);
   }
 }
 
 /** Error for LRC validation failures. */
-export class ModbusLRCError extends ModbusError {
-  constructor() {
-    super("LRC error");
-    this.name = "ModbusLRCError";
+export class ModbusLRCError extends Error {
+  name = "ModbusLRCError" as const;
+  constructor(options?: ErrorOptions) {
+    super("LRC error", options);
   }
 }
 
 /** Error for invalid frame format. */
-export class ModbusFrameError extends ModbusError {
-  constructor(message: string) {
-    super(`Frame error: ${message}`);
-    this.name = "ModbusFrameError";
-  }
-}
-
-/** Error for concurrent request attempts. */
-export class ModbusBusyError extends ModbusError {
-  constructor() {
-    super("Another request is in progress");
-    this.name = "ModbusBusyError";
+export class ModbusFrameError extends Error {
+  name = "ModbusFrameError" as const;
+  constructor(message: string, options?: ErrorOptions) {
+    super(`Frame error: ${message}`, options);
   }
 }

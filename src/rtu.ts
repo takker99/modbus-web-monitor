@@ -8,7 +8,7 @@ import {
   type Result,
   unwrapOk,
 } from "option-t/plain_result";
-import { type MODBUS_EXCEPTION_CODES, ModbusExceptionError } from "./errors.ts";
+import { ModbusExceptionError } from "./errors.ts";
 import { buildReadRequest, buildWriteRequest } from "./frameBuilder.ts";
 import {
   getExpectedResponseLength,
@@ -255,13 +255,7 @@ async function send(
           if (buffer.length >= 5) {
             const errorCode = buffer[2];
             cleanup();
-            resolve(
-              createErr(
-                new ModbusExceptionError(
-                  errorCode as keyof typeof MODBUS_EXCEPTION_CODES,
-                ),
-              ),
-            );
+            resolve(createErr(new ModbusExceptionError(errorCode)));
             return;
           }
           break;
