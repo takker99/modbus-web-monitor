@@ -135,10 +135,10 @@ export async function writeMultipleRegisters(
   );
 }
 
-async function read(
+export async function read(
   transport: IModbusTransport,
   request: ReadRequest,
-  options: RequestOptions,
+  options?: RequestOptions,
 ): Promise<Result<ModbusResponse, Error>> {
   if (!transport.connected)
     return createErr(new Error("Transport not connected"));
@@ -149,7 +149,7 @@ async function read(
       requestFrame,
       request.slaveId,
       request.functionCode,
-      options.signal,
+      options?.signal,
     );
     if (isErr(responseResult)) return responseResult;
     const responseData = unwrapOk(responseResult);
@@ -174,10 +174,10 @@ async function read(
   }
 }
 
-async function write(
+export async function write(
   transport: IModbusTransport,
   request: WriteRequest,
-  options: RequestOptions,
+  options?: RequestOptions,
 ): Promise<Result<void, Error>> {
   if (!transport.connected)
     return createErr(new Error("Transport not connected"));
@@ -188,7 +188,7 @@ async function write(
       requestFrame,
       request.slaveId,
       request.functionCode,
-      options.signal,
+      options?.signal,
     );
     if (isErr(responseResult)) return responseResult;
     return createOk(undefined);

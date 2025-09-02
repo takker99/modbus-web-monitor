@@ -1,9 +1,10 @@
 import type { FunctionalComponent } from "preact";
+import type { ReadFunctionCode } from "../../functionCodes";
 
 interface ReadConfig {
-  functionCode: 1 | 2 | 3 | 4;
+  functionCode: ReadFunctionCode;
   quantity: number;
-  startAddress: number;
+  address: number;
 }
 interface Props {
   isConnected: boolean;
@@ -60,11 +61,11 @@ export const ReadPanel: FunctionalComponent<Props> = ({
           onChange={(e) =>
             setReadConfig((prev) => ({
               ...prev,
-              startAddress: Number(e.currentTarget.value),
+              address: Number(e.currentTarget.value),
             }))
           }
           type="number"
-          value={readConfig.startAddress}
+          value={readConfig.address}
         />
       </div>
       <div className="form-group">

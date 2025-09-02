@@ -1,33 +1,13 @@
-import { isOk, type Result, unwrapErr, unwrapOk } from "option-t/plain_result";
+import { isErr, unwrapErr, unwrapOk } from "option-t/plain_result";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
-import {
-  readCoils as asciiReadCoils,
-  readDiscreteInputs as asciiReadDiscreteInputs,
-  readHoldingRegisters as asciiReadHoldingRegisters,
-  readInputRegisters as asciiReadInputRegisters,
-  writeMultipleCoils as asciiWriteMultipleCoils,
-  writeMultipleRegisters as asciiWriteMultipleRegisters,
-  writeSingleCoil as asciiWriteSingleCoil,
-  writeSingleRegister as asciiWriteSingleRegister,
-} from "../ascii.ts";
+import { read as asciiRead, write as asciiWrite } from "../ascii.ts";
 import type { ModbusProtocol } from "../frameBuilder.ts";
 import { buildReadRequest, buildWriteRequest } from "../frameBuilder.ts";
-import type { WriteFunctionCode } from "../functionCodes.ts";
-import type { ModbusResponse } from "../modbus.ts";
-import {
-  readCoils as rtuReadCoils,
-  readDiscreteInputs as rtuReadDiscreteInputs,
-  readHoldingRegisters as rtuReadHoldingRegisters,
-  readInputRegisters as rtuReadInputRegisters,
-  writeMultipleCoils as rtuWriteMultipleCoils,
-  writeMultipleRegisters as rtuWriteMultipleRegisters,
-  writeSingleCoil as rtuWriteSingleCoil,
-  writeSingleRegister as rtuWriteSingleRegister,
-} from "../rtu.ts";
+import type { ReadFunctionCode, WriteFunctionCode } from "../functionCodes.ts";
+import type { ModbusResponse, ReadRequest, WriteRequest } from "../modbus.ts";
+import { read as rtuRead, write as rtuWrite } from "../rtu.ts";
 import type { SerialConfig, SerialManager } from "../serial.ts";
-// 直接 SerialTransport を利用
 import { SerialTransport } from "../transport/serial-transport.ts";
-// --- SerialManager を IModbusTransport へアダプト ---
 import type { IModbusTransport } from "../transport/transport.ts";
 import { ConnectionSettingsPanel } from "./components/ConnectionSettingsPanel.tsx";
 import { DataDisplayPanel } from "./components/DataDisplayPanel.tsx";
@@ -45,12 +25,18 @@ import {
 } from "./modbusUtils.ts";
 
 // Extended interface for the UI state (includes additional fields for multi-value input)
-interface ModbusWriteUIConfig {
+interface UIWriteConfig {
   address: number;
   functionCode: WriteFunctionCode;
   multiValues: string; // For multi-write input (comma-separated or multi-line)
   quantity: number; // For multi-writes (FC15/16)
   value: string; // For single-value input
+}
+
+interface UIReadConfig {
+  functionCode: ReadFunctionCode;
+  quantity: number;
+  address: number;
 }
 
 export function App() {
@@ -85,17 +71,12 @@ export function App() {
   // Modbus configuration state
   const [slaveId, setSlaveId] = useState(1);
   const [protocol, setProtocol] = useState<ModbusProtocol>("rtu");
-  interface UIReadConfig {
-    functionCode: 1 | 2 | 3 | 4;
-    quantity: number;
-    startAddress: number;
-  }
   const [readConfig, setReadConfig] = useState<UIReadConfig>({
+    address: 0,
     functionCode: 3,
     quantity: 10,
-    startAddress: 0,
   });
-  const [writeConfig, setWriteConfig] = useState<ModbusWriteUIConfig>({
+  const [writeConfig, setWriteConfig] = useState<UIWriteConfig>({
     address: 0,
     functionCode: 6 as WriteFunctionCode,
     multiValues: "", // For multi-write input (comma-separated or multi-line)
@@ -181,23 +162,15 @@ export function App() {
 
   const handleRead = async () => {
     if (!isConnected) return;
-    const { functionCode, quantity, startAddress } = readConfig;
     const transport = transportRef.current;
     if (!transport) {
       addLog("Error", "Transport not ready");
       return;
     }
+    const request: ReadRequest = { ...readConfig, slaveId };
     // 低レベル送信フレームを構築しログ (RTU/ASCII 切替)
     try {
-      const frame = buildReadRequest(
-        {
-          address: startAddress,
-          functionCode, // 1|2|3|4
-          quantity,
-          slaveId,
-        },
-        protocol,
-      );
+      const frame = buildReadRequest(request, protocol);
       const hex = Array.from(frame)
         .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
         .join(" ");
@@ -205,55 +178,21 @@ export function App() {
     } catch (e) {
       addLog("Warning", `Frame build failed (read): ${(e as Error).message}`);
     }
-    const commonArgs: [IModbusTransport, number, number, number] = [
-      transport,
-      slaveId,
-      startAddress,
-      quantity,
-    ];
-    let result: Result<ModbusResponse, Error> | undefined;
     try {
-      if (protocol === "rtu") {
-        switch (functionCode) {
-          case 1:
-            result = await rtuReadCoils(...commonArgs);
-            break;
-          case 2:
-            result = await rtuReadDiscreteInputs(...commonArgs);
-            break;
-          case 3:
-            result = await rtuReadHoldingRegisters(...commonArgs);
-            break;
-          case 4:
-            result = await rtuReadInputRegisters(...commonArgs);
-            break;
-        }
-      } else {
-        switch (functionCode) {
-          case 1:
-            result = await asciiReadCoils(...commonArgs);
-            break;
-          case 2:
-            result = await asciiReadDiscreteInputs(...commonArgs);
-            break;
-          case 3:
-            result = await asciiReadHoldingRegisters(...commonArgs);
-            break;
-          case 4:
-            result = await asciiReadInputRegisters(...commonArgs);
-            break;
-        }
-      }
-      if (result && isOk(result)) {
-        const resp = unwrapOk(result);
-        setData((prev) => [...prev.slice(-99), resp]);
-        addLog(
-          "Info",
-          `Modbus response (FC ${resp.functionCode}): received ${resp.data.length} values`,
-        );
-      } else if (result) {
+      const result =
+        protocol === "rtu"
+          ? await rtuRead(transport, request)
+          : await asciiRead(transport, request);
+      if (isErr(result)) {
         addLog("Error", `Read error: ${unwrapErr(result).message}`);
+        return;
       }
+      const resp = unwrapOk(result);
+      setData((prev) => [...prev.slice(-99), resp]);
+      addLog(
+        "Info",
+        `Modbus response (FC ${resp.functionCode}): received ${resp.data.length} values`,
+      );
     } catch (e) {
       addLog("Error", `Read error: ${(e as Error).message}`);
     }
@@ -305,88 +244,26 @@ export function App() {
           `Frame build failed (write): ${(e as Error).message}`,
         );
       }
-      let result: Result<void, Error> | undefined;
       const t = transportRef.current;
       if (!t) {
         addLog("Error", "Transport not ready");
         return;
       }
-      if (protocol === "rtu") {
-        switch (fc) {
-          case 5:
-            result = await rtuWriteSingleCoil(
-              t,
-              slaveId,
-              writeConfig.address,
-              (value as number) !== 0,
-            );
-            break;
-          case 6:
-            result = await rtuWriteSingleRegister(
-              t,
-              slaveId,
-              writeConfig.address,
-              value as number,
-            );
-            break;
-          case 15:
-            result = await rtuWriteMultipleCoils(
-              t,
-              slaveId,
-              writeConfig.address,
-              (value as number[]).map((v) => v !== 0),
-            );
-            break;
-          case 16:
-            result = await rtuWriteMultipleRegisters(
-              t,
-              slaveId,
-              writeConfig.address,
-              value as number[],
-            );
-            break;
-        }
-      } else {
-        switch (fc) {
-          case 5:
-            result = await asciiWriteSingleCoil(
-              t,
-              slaveId,
-              writeConfig.address,
-              (value as number) !== 0,
-            );
-            break;
-          case 6:
-            result = await asciiWriteSingleRegister(
-              t,
-              slaveId,
-              writeConfig.address,
-              value as number,
-            );
-            break;
-          case 15:
-            result = await asciiWriteMultipleCoils(
-              t,
-              slaveId,
-              writeConfig.address,
-              (value as number[]).map((v) => v !== 0),
-            );
-            break;
-          case 16:
-            result = await asciiWriteMultipleRegisters(
-              t,
-              slaveId,
-              writeConfig.address,
-              value as number[],
-            );
-            break;
-        }
-      }
-      if (result && !isOk(result)) {
+      const request: WriteRequest = {
+        address: writeConfig.address,
+        functionCode: fc,
+        slaveId,
+        value,
+      };
+      const result =
+        protocol === "rtu"
+          ? await rtuWrite(t, request)
+          : await asciiWrite(t, request);
+      if (isErr(result)) {
         addLog("Error", `Write error: ${unwrapErr(result).message}`);
-      } else {
-        addLog("Info", `Write success (FC${fc})`);
+        return;
       }
+      addLog("Info", `Write success (FC${fc})`);
     } catch (e) {
       addLog("Error", `Write error: ${(e as Error).message}`);
     }
@@ -522,7 +399,7 @@ export function App() {
           onCopyAll={copyAllLogs}
           onCopyEntry={copyLogEntry}
           onHexToggle={(checked) => setHexDisplay(checked)}
-          readStartAddress={readConfig.startAddress}
+          readStartAddress={readConfig.address}
         />
       </main>
     </div>

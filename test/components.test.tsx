@@ -82,17 +82,17 @@ describe("ReadPanel", () => {
         onPollingIntervalChange={onPI}
         onRead={onRead}
         pollingInterval={1000}
-        readConfig={{ functionCode: 3, quantity: 10, startAddress: 0 }}
+        readConfig={{ address: 0, functionCode: 3, quantity: 10 }}
         setReadConfig={
           setRead as unknown as (
             u: (p: {
               functionCode: 1 | 2 | 3 | 4;
               quantity: number;
-              startAddress: number;
+              address: number;
             }) => {
               functionCode: 1 | 2 | 3 | 4;
               quantity: number;
-              startAddress: number;
+              address: number;
             },
           ) => void
         }

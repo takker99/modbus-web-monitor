@@ -105,17 +105,17 @@ describe("ReadPanel extra states", () => {
         onPollingIntervalChange={() => {}}
         onRead={() => {}}
         pollingInterval={500}
-        readConfig={{ functionCode: 3, quantity: 5, startAddress: 0 }}
+        readConfig={{ address: 0, functionCode: 3, quantity: 5 }}
         setReadConfig={
           vi.fn() as unknown as (
             u: (p: {
               functionCode: 1 | 2 | 3 | 4;
               quantity: number;
-              startAddress: number;
+              address: number;
             }) => {
               functionCode: 1 | 2 | 3 | 4;
               quantity: number;
-              startAddress: number;
+              address: number;
             },
           ) => void
         }
