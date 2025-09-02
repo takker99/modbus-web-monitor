@@ -1,3 +1,4 @@
+import { isErr, isOk, unwrapErr, unwrapOk } from "option-t/plain_result";
 import { describe, expect, it } from "vitest";
 import { readHoldingRegisters } from "../src/ascii.ts";
 import { ModbusExceptionError } from "../src/errors.ts";
@@ -37,8 +38,8 @@ describe("ASCII additional branches", () => {
     transport.simulateData(new TextEncoder().encode(ascii));
     ctrl.abort(new Error("Aborted"));
     const result = await p;
-    expect(result.success).toBe(false);
-    if (!result.success) expect(result.error.message).toMatch(/aborted/i);
+    expect(isOk(result)).toBe(false);
+    if (isErr(result)) expect(unwrapErr(result).message).toMatch(/aborted/i);
   });
 
   it("invalid frame (bad hex) discarded, then valid frame processed", async () => {
@@ -58,8 +59,8 @@ describe("ASCII additional branches", () => {
     transport.simulateData(new TextEncoder().encode(corrupted));
     transport.simulateData(new TextEncoder().encode(validAscii));
     const res = await p;
-    expect(res.success).toBe(true);
-    if (res.success) expect(res.data.data[0]).toBe(0x000a);
+    expect(isOk(res)).toBe(true);
+    if (isOk(res)) expect(unwrapOk(res).data[0]).toBe(0x000a);
   });
 
   it("exception frame produces ModbusExceptionError", async () => {
@@ -74,8 +75,8 @@ describe("ASCII additional branches", () => {
       new TextEncoder().encode(`${buildAsciiFrame(exc)}\r\n`),
     );
     const res = await p;
-    expect(res.success).toBe(false);
-    if (!res.success) expect(res.error).toBeInstanceOf(ModbusExceptionError);
+    expect(isOk(res)).toBe(false);
+    if (isErr(res)) expect(unwrapErr(res)).toBeInstanceOf(ModbusExceptionError);
   });
 
   it("error event propagates as error result", async () => {
@@ -87,8 +88,8 @@ describe("ASCII additional branches", () => {
     const p = readHoldingRegisters(transport, 1, 0, 1);
     transport.simulateError(new Error("Boom"));
     const res = await p;
-    expect(res.success).toBe(false);
-    if (!res.success) expect(res.error.message).toBe("Boom");
+    expect(isOk(res)).toBe(false);
+    if (isErr(res)) expect(unwrapErr(res).message).toBe("Boom");
   });
 
   it("skips unmatched frame then processes matching frame", async () => {
@@ -107,7 +108,7 @@ describe("ASCII additional branches", () => {
       ),
     );
     const res = await p;
-    expect(res.success).toBe(true);
-    if (res.success) expect(res.data.data[0]).toBe(0x0033);
+    expect(isOk(res)).toBe(true);
+    if (isOk(res)) expect(unwrapOk(res).data[0]).toBe(0x0033);
   });
 });

@@ -11,6 +11,9 @@ importers:
       crc:
         specifier: ^4.3.2
         version: 4.3.2
+      option-t:
+        specifier: ^54.2.3
+        version: 54.2.3
       preact:
         specifier: ^10.27.1
         version: 10.27.1
@@ -1224,6 +1227,10 @@ packages:
   object.assign@4.1.7:
     resolution: {integrity: sha512-nK28WOo+QIjBkDduTINE4JkF/UJJKyf2EJxvJKfblDpyg0Q+pkOHNTL0Qwy6NP6FhE/EnzV73BxxqcJaXY9anw==}
     engines: {node: '>= 0.4'}
+
+  option-t@54.2.3:
+    resolution: {integrity: sha512-dFyvHsYd416+PW8HMby+vvN3zVL/OOQZj3evQTdy35Sz100JpQZAYCeV7NmiwINzxqVlkpj5FBKV28WoTvtEfA==}
+    engines: {node: '>=24.5.0'}
 
   package-json-from-dist@1.0.1:
     resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
@@ -2759,6 +2766,8 @@ snapshots:
       es-object-atoms: 1.1.1
       has-symbols: 1.1.0
       object-keys: 1.1.1
+
+  option-t@54.2.3: {}
 
   package-json-from-dist@1.0.1: {}
 

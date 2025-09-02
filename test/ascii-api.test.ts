@@ -1,3 +1,4 @@
+import { isErr, isOk, unwrapErr, unwrapOk } from "option-t/plain_result";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as ascii from "../src/ascii.ts";
 import { ModbusExceptionError } from "../src/errors.ts";
@@ -39,8 +40,8 @@ describe("ASCII API full coverage", () => {
     // Emit response manually because ASCII validation discards byteCount
     setTimeout(() => transport.simulateData(toAsciiFrame(payload)), 1);
     const res = await ascii.readHoldingRegisters(transport, 1, 0x0002, 2);
-    if (!res.success) throw res.error;
-    expect(res.data.data).toEqual([0x0011, 0x2233]);
+    if (isErr(res)) throw unwrapErr(res);
+    expect(unwrapOk(res).data).toEqual([0x0011, 0x2233]);
   });
 
   it("readCoils success (bits)", async () => {
@@ -52,11 +53,13 @@ describe("ASCII API full coverage", () => {
     const payload = [1, 1, 2, 0b11001010, 0b00000011];
     setTimeout(() => transport.simulateData(toAsciiFrame(payload)), 1);
     const res = await ascii.readCoils(transport, 1, 0x0000, 10);
-    if (!res.success) throw res.error;
+    if (isErr(res)) throw unwrapErr(res);
     // parseBitResponse pushes bits LSB-first of each byte
     // First byte 0b11001010 -> bits (LSB->) 0,1,0,1,0,0,1,1
     // Second byte 0b00000011 -> 1,1,0,0,0,0,0,0 ... we only care first two to reach 10 total bits
-    expect(res.data.data.slice(0, 10)).toEqual([0, 1, 0, 1, 0, 0, 1, 1, 1, 1]);
+    expect(unwrapOk(res).data.slice(0, 10)).toEqual([
+      0, 1, 0, 1, 0, 0, 1, 1, 1, 1,
+    ]);
   });
 
   it("writeSingleRegister success", async () => {
@@ -68,7 +71,7 @@ describe("ASCII API full coverage", () => {
     const payload = [1, 6, 0x00, 0x20, 0x12, 0x34];
     setTimeout(() => transport.simulateData(toAsciiFrame(payload)), 1);
     const res = await ascii.writeSingleRegister(transport, 1, 0x0020, 0x1234);
-    if (!res.success) throw res.error;
+    if (isErr(res)) throw unwrapErr(res);
   });
 
   it("writeMultipleRegisters success", async () => {
@@ -90,7 +93,7 @@ describe("ASCII API full coverage", () => {
       0x0100,
       [0x1111, 0x2222],
     );
-    if (!res.success) throw res.error;
+    if (isErr(res)) throw unwrapErr(res);
   });
 
   it("exception frame", async () => {
@@ -102,9 +105,9 @@ describe("ASCII API full coverage", () => {
     const payload = [1, 3 | 0x80, 2];
     setTimeout(() => transport.simulateData(toAsciiFrame(payload)), 1);
     const res = await ascii.readHoldingRegisters(transport, 1, 0x0000, 1);
-    expect(res.success).toBe(false);
-    if (res.success) return; // TS narrow guard
-    expect(res.error).toBeInstanceOf(ModbusExceptionError);
+    expect(isOk(res)).toBe(false);
+    if (isOk(res)) return; // TS narrow guard
+    expect(unwrapErr(res)).toBeInstanceOf(ModbusExceptionError);
   });
 
   it("abort via AbortController (no implicit timeout)", async () => {
@@ -114,9 +117,7 @@ describe("ASCII API full coverage", () => {
     });
     controller.abort(new Error("Aborted"));
     const res = await promise;
-    expect(res.success).toBe(false);
-    if (!res.success) {
-      expect(res.error.message).toMatch(/Aborted/);
-    }
+    expect(isOk(res)).toBe(false);
+    if (isErr(res)) expect(unwrapErr(res).message).toMatch(/Aborted/);
   });
 });

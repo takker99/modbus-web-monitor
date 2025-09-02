@@ -1,8 +1,9 @@
 // Tests for pure function API
+
+import { isErr, isOk, unwrapErr, unwrapOk } from "option-t/plain_result";
 import { beforeEach, describe, expect, it } from "vitest";
 import { readHoldingRegisters as readHoldingRegistersASCII } from "../src/ascii.ts";
 import { calculateCRC16 } from "../src/crc.ts";
-import { isErr, isOk } from "../src/result.ts";
 import {
   readCoils,
   readDiscreteInputs,
@@ -53,12 +54,13 @@ describe("Pure Function API", () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.data.slaveId).toBe(1);
-        expect(result.data.functionCode).toBe(1);
-        expect(result.data.address).toBe(0);
-        expect(result.data.data).toHaveLength(8);
-        // First 8 bits of 0xAB (171): 1,1,0,1,0,1,0,1
-        expect(result.data.data.slice(0, 8)).toEqual([1, 1, 0, 1, 0, 1, 0, 1]);
+        const data = unwrapOk(result);
+        expect(data.slaveId).toBe(1);
+        expect(data.functionCode).toBe(1);
+        expect(data.address).toBe(0);
+        expect(data.data).toHaveLength(8);
+        // Firss of 0xAB (171): 1,1,0,1,0,1,0,1
+        expect(data.data.slice(0, 8)).toEqual([1, 1, 0, 1, 0, 1, 0, 1]);
       }
     });
 
@@ -80,9 +82,10 @@ describe("Pure Function API", () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.data.functionCode).toBe(2);
-        expect(result.data.address).toBe(10);
-        expect(result.data.data.slice(0, 5)).toEqual([1, 1, 1, 1, 1]);
+        const data = unwrapOk(result);
+        expect(data.functionCode).toBe(2);
+        expect(data.address).toBe(10);
+        expect(data.data.slice(0, 5)).toEqual([1, 1, 1, 1, 1]);
       }
     });
 
@@ -104,8 +107,9 @@ describe("Pure Function API", () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.data.functionCode).toBe(3);
-        expect(result.data.data).toEqual([0x1234, 0x5678]);
+        const data = unwrapOk(result);
+        expect(data.functionCode).toBe(3);
+        expect(data.data).toEqual([0x1234, 0x5678]);
       }
     });
 
@@ -127,8 +131,9 @@ describe("Pure Function API", () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.data.functionCode).toBe(4);
-        expect(result.data.data).toEqual([0xabcd]);
+        const data = unwrapOk(result);
+        expect(data.functionCode).toBe(4);
+        expect(data.data).toEqual([0xabcd]);
       }
     });
 
@@ -150,9 +155,8 @@ describe("Pure Function API", () => {
       const result = await readHoldingRegisters(transport, 1, 0, 1);
 
       expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain("Illegal function");
-      }
+      if (isErr(result))
+        expect(unwrapErr(result).message).toContain("Illegal function");
     });
   });
 
@@ -246,7 +250,7 @@ describe("Pure Function API", () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe("Transport not connected");
+        expect(unwrapErr(result).message).toBe("Transport not connected");
       }
     });
 
@@ -259,7 +263,7 @@ describe("Pure Function API", () => {
       const result = await p;
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toMatch(/aborted/i);
+        expect(unwrapErr(result).message).toMatch(/aborted/i);
       }
     });
 
@@ -274,7 +278,7 @@ describe("Pure Function API", () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe("Send failed");
+        expect(unwrapErr(result).message).toBe("Send failed");
       }
     });
 
@@ -288,7 +292,7 @@ describe("Pure Function API", () => {
       const result = await p;
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toMatch(/aborted/i);
+        expect(unwrapErr(result).message).toMatch(/aborted/i);
       }
     });
 
@@ -312,7 +316,7 @@ describe("Pure Function API", () => {
       const result = await p;
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toMatch(/aborted/i);
+        expect(unwrapErr(result).message).toMatch(/aborted/i);
       }
     });
 
@@ -336,7 +340,7 @@ describe("Pure Function API", () => {
       const result = await p;
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toMatch(/aborted/i);
+        expect(unwrapErr(result).message).toMatch(/aborted/i);
       }
     });
 
@@ -355,7 +359,7 @@ describe("Pure Function API", () => {
         const result = await readFunc();
         expect(isErr(result)).toBe(true);
         if (isErr(result)) {
-          expect(result.error.message).toBe("Transport not connected");
+          expect(unwrapErr(result).message).toBe("Transport not connected");
         }
       }
     });
@@ -375,7 +379,7 @@ describe("Pure Function API", () => {
         const result = await writeFunc();
         expect(isErr(result)).toBe(true);
         if (isErr(result)) {
-          expect(result.error.message).toBe("Transport not connected");
+          expect(unwrapErr(result).message).toBe("Transport not connected");
         }
       }
     });
@@ -407,7 +411,7 @@ describe("Pure Function API", () => {
 
         expect(isErr(result)).toBe(true);
         if (isErr(result)) {
-          expect(result.error.message).toContain(exc.name);
+          expect(unwrapErr(result).message).toContain(exc.name);
         }
       }
     });

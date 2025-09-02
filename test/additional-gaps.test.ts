@@ -1,3 +1,4 @@
+import { isOk } from "option-t/plain_result";
 import { describe, expect, it } from "vitest";
 import { calculateCRC16 } from "../src/crc.ts";
 import {
@@ -72,18 +73,18 @@ describe("frameParser extra negative branches", () => {
   it("parseRTUFrame unknown function code", () => {
     const buf = withCRC([1, 99, 0x00, 0x00]); // will be length 6 but function 99 triggers unknown
     const result = parseRTUFrame(buf);
-    expect(result.success).toBe(false);
+    expect(isOk(result)).toBe(false);
   });
 
   it("validateRTUFrame invalid function code", () => {
     const buf = withCRC([1, 99, 0, 0]);
     const res = validateRTUFrame(buf);
-    expect(res.isValid).toBe(false);
+    expect(isOk(res)).toBe(false);
   });
 
   it("validateASCIIFrame invalid format", () => {
     const res = validateASCIIFrame("XX0102");
-    expect(res.isValid).toBe(false);
+    expect(isOk(res)).toBe(false);
   });
 
   it("getExpectedResponseLength exception", () => {

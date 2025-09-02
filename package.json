@@ -2,6 +2,7 @@
   "author": "takker99",
   "dependencies": {
     "crc": "^4.3.2",
+    "option-t": "^54.2.3",
     "preact": "^10.27.1"
   },
   "description": "Web-based Modbus communication monitor using Web Serial API",

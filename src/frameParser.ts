@@ -2,11 +2,17 @@
  * Pure functions for parsing Modbus frames and responses.
  */
 
+import {
+  createErr,
+  createOk,
+  isErr,
+  type Result,
+  unwrapOk,
+} from "option-t/plain_result";
 import { calculateCRC16 } from "./crc.ts";
 import { ModbusCRCError, ModbusFrameError, ModbusLRCError } from "./errors.ts";
 import { isFunctionCode } from "./functionCodes.ts";
 import { calculateLRC } from "./lrc.ts";
-import type { Result } from "./result.ts";
 
 /**
  * Parsed frame shape returned by the parsers.
@@ -149,12 +155,13 @@ export function findFrameResyncPosition(buffer: number[]): number {
  * Returns a ParseResult which contains either the parsed frame or an error
  * describing why parsing failed.
  */
-export function parseRTUFrame(buffer: number[]): Result<ParsedFrame> {
+export function parseRTUFrame(
+  buffer: number[],
+): Result<ParsedFrame, ModbusFrameError | ModbusCRCError> {
   if (buffer.length < 5) {
-    return {
-      error: new ModbusFrameError("RTU frame too short (minimum 5 bytes)"),
-      success: false,
-    };
+    return createErr(
+      new ModbusFrameError("RTU frame too short (minimum 5 bytes)"),
+    );
   }
 
   const slaveId = buffer[0];
@@ -171,10 +178,7 @@ export function parseRTUFrame(buffer: number[]): Result<ParsedFrame> {
       case 3:
       case 4:
         if (buffer.length < 3)
-          return {
-            error: new ModbusFrameError("Incomplete response header"),
-            success: false,
-          };
+          return createErr(new ModbusFrameError("Incomplete response header"));
         expectedLength = 3 + buffer[2] + 2; // slave + fc + byteCount + data + crc(2)
         break;
       case 5:
@@ -186,24 +190,22 @@ export function parseRTUFrame(buffer: number[]): Result<ParsedFrame> {
         expectedLength = 8; // slave + fc + addr(2) + qty(2) + crc(2)
         break;
       default:
-        return {
-          error: new ModbusFrameError(`Unknown function code: ${functionCode}`),
-          success: false,
-        };
+        return createErr(
+          new ModbusFrameError(`Unknown function code: ${functionCode}`),
+        );
     }
   }
 
   if (buffer.length < expectedLength) {
-    return {
-      error: new ModbusFrameError(
+    return createErr(
+      new ModbusFrameError(
         `Incomplete frame: expected ${expectedLength} bytes, got ${buffer.length}`,
       ),
-      success: false,
-    };
+    );
   }
 
   if (!checkFrameCRC(buffer, expectedLength)) {
-    return { error: new ModbusCRCError(), success: false };
+    return createErr(new ModbusCRCError());
   }
 
   let data: number[];
@@ -231,16 +233,13 @@ export function parseRTUFrame(buffer: number[]): Result<ParsedFrame> {
     }
   }
 
-  return {
-    data: {
-      data,
-      exceptionCode,
-      functionCode: functionCode & 0x7f,
-      isException,
-      slaveId,
-    },
-    success: true,
-  };
+  return createOk({
+    data,
+    exceptionCode,
+    functionCode: functionCode & 0x7f,
+    isException,
+    slaveId,
+  });
 }
 
 /**
@@ -249,49 +248,38 @@ export function parseRTUFrame(buffer: number[]): Result<ParsedFrame> {
  * The function accepts a full ASCII frame (including leading ':') and
  * returns the parsed payload or an error on invalid format / LRC mismatch.
  */
-export function parseASCIIFrame(frameString: string): Result<ParsedFrame> {
+export function parseASCIIFrame(
+  frameString: string,
+): Result<ParsedFrame, ModbusFrameError | ModbusLRCError> {
   // Accept frames optionally terminated with CRLF ("\r\n"). The caller (ASCII stream scanner)
   // currently slices including CRLF, so we normalize here to simplify downstream parsing.
   if (frameString.endsWith("\r\n")) {
     frameString = frameString.slice(0, -2);
   }
   if (frameString.length < 3 || frameString[0] !== ":") {
-    return {
-      error: new ModbusFrameError("Invalid ASCII frame format"),
-      success: false,
-    };
+    return createErr(new ModbusFrameError("Invalid ASCII frame format"));
   }
-
   const hexString = frameString.substring(1);
   if (hexString.length % 2 !== 0) {
-    return {
-      error: new ModbusFrameError(
-        "ASCII frame contains odd number of hex characters",
-      ),
-      success: false,
-    };
+    return createErr(
+      new ModbusFrameError("ASCII frame contains odd number of hex characters"),
+    );
   }
 
   const frameBytes: number[] = [];
   for (let i = 0; i < hexString.length; i += 2) {
     const hexPair = hexString.substring(i, i + 2);
     if (!/^[0-9A-Fa-f]{2}$/.test(hexPair)) {
-      return {
-        error: new ModbusFrameError(
-          `Invalid hex pair in ASCII frame: ${hexPair}`,
-        ),
-        success: false,
-      };
+      return createErr(
+        new ModbusFrameError(`Invalid hex pair in ASCII frame: ${hexPair}`),
+      );
     }
     const byte = parseInt(hexPair, 16);
     frameBytes.push(byte);
   }
 
   if (frameBytes.length < 3) {
-    return {
-      error: new ModbusFrameError("ASCII frame too short"),
-      success: false,
-    };
+    return createErr(new ModbusFrameError("ASCII frame too short"));
   }
 
   const receivedLRC = frameBytes[frameBytes.length - 1];
@@ -299,7 +287,7 @@ export function parseASCIIFrame(frameString: string): Result<ParsedFrame> {
   const calculatedLRC = calculateLRC(messageBytes);
 
   if (receivedLRC !== calculatedLRC) {
-    return { error: new ModbusLRCError(), success: false };
+    return createErr(new ModbusLRCError());
   }
 
   const slaveId = messageBytes[0];
@@ -312,10 +300,7 @@ export function parseASCIIFrame(frameString: string): Result<ParsedFrame> {
 
   if (isException) {
     if (messageBytes.length < 3) {
-      return {
-        error: new ModbusFrameError("Invalid exception frame length"),
-        success: false,
-      };
+      return createErr(new ModbusFrameError("Invalid exception frame length"));
     }
     exceptionCode = messageBytes[2];
     data = [];
@@ -332,17 +317,14 @@ export function parseASCIIFrame(frameString: string): Result<ParsedFrame> {
     }
   }
 
-  return {
-    data: {
-      data,
-      exceptionCode,
-      // For consistency with existing tests, expose base function code (mask exception bit)
-      functionCode: baseFunctionCode,
-      isException,
-      slaveId,
-    },
-    success: true,
-  };
+  return createOk({
+    data,
+    exceptionCode,
+    // For consistency with existing tests, expose base function code (mask exception bit)
+    functionCode: baseFunctionCode,
+    isException,
+    slaveId,
+  });
 }
 
 export function checkFrameCRC(
@@ -357,64 +339,54 @@ export function checkFrameCRC(
 }
 
 /**
- * Helper function to validate RTU frame. Returns {isValid,error?}.
+ * Helper function to validate RTU frame.
  */
-export function validateRTUFrame(frame: number[]): {
-  isValid: boolean;
-  error?: Error;
-} {
+export function validateRTUFrame(
+  frame: number[],
+): Result<void, ModbusFrameError | ModbusCRCError> {
   if (frame.length < 5) {
-    return {
-      error: new ModbusFrameError("RTU frame too short"),
-      isValid: false,
-    };
+    return createErr(new ModbusFrameError("RTU frame too short"));
   }
 
   const expectedLength = getExpectedResponseLength(frame);
   if (expectedLength === -1) {
-    return {
-      error: new ModbusFrameError("Invalid function code"),
-      isValid: false,
-    };
+    return createErr(new ModbusFrameError("Invalid function code"));
   }
 
   if (frame.length < expectedLength) {
-    return { error: new ModbusFrameError("Incomplete frame"), isValid: false };
+    return createErr(new ModbusFrameError("Incomplete frame"));
   }
 
   if (!checkFrameCRC(frame, expectedLength)) {
-    return { error: new ModbusCRCError(), isValid: false };
+    return createErr(new ModbusCRCError());
   }
 
-  return { isValid: true };
+  return createOk(undefined);
 }
 
 /**
  * Helper function to validate ASCII frame and return parsed number array.
  */
-export function validateASCIIFrame(frameString: string): {
-  isValid: boolean;
-  frame?: number[];
-  error?: Error;
-} {
+export function validateASCIIFrame(
+  frameString: string,
+): Result<number[], ModbusFrameError | ModbusLRCError> {
   const result = parseASCIIFrame(frameString);
-  if (!result.success) {
-    return { error: result.error, isValid: false };
-  }
+  if (isErr(result)) return result;
 
   // Reconstruct the minimal raw frame bytes expected by ASCII request waiter.
   // Important: preserve exception bit (0x80) so higher-level logic can detect
   // Modbus exception responses. For exception frames include the exception
   // code byte (which parseASCIIFrame keeps separate from data array).
-  const rawFunctionCode = result.data.isException
-    ? result.data.functionCode | 0x80
-    : result.data.functionCode;
-  const exceptionCode = result.data.exceptionCode ?? 0;
-  const frame: number[] = result.data.isException
-    ? [result.data.slaveId, rawFunctionCode, exceptionCode]
-    : [result.data.slaveId, rawFunctionCode, ...result.data.data];
+  const data = unwrapOk(result);
+  const rawFunctionCode = data.isException
+    ? data.functionCode | 0x80
+    : data.functionCode;
+  const exceptionCode = data.exceptionCode ?? 0;
+  const frame: number[] = data.isException
+    ? [data.slaveId, rawFunctionCode, exceptionCode]
+    : [data.slaveId, rawFunctionCode, ...data.data];
 
-  return { frame, isValid: true };
+  return createOk(frame);
 }
 
 /**

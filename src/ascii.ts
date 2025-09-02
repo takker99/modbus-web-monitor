@@ -1,5 +1,14 @@
 // ASCII-specific pure function API extracted from pure-functions.ts
 // Provides a functional interface for Modbus ASCII without bundling RTU logic
+
+import {
+  createErr,
+  createOk,
+  isErr,
+  isOk,
+  type Result,
+  unwrapOk,
+} from "option-t/plain_result";
 import { type MODBUS_EXCEPTION_CODES, ModbusExceptionError } from "./errors.ts";
 import { buildReadRequest, buildWriteRequest } from "./frameBuilder.ts";
 import {
@@ -13,8 +22,6 @@ import type {
   RequestOptions,
   WriteRequest,
 } from "./modbus.ts";
-import type { Result } from "./result.ts";
-import { err, ok } from "./result.ts";
 import type { IModbusTransport } from "./transport/transport.ts";
 
 export async function readCoils(
@@ -133,7 +140,8 @@ async function read(
   request: ReadRequest,
   options: RequestOptions,
 ): Promise<Result<ModbusResponse, Error>> {
-  if (!transport.connected) return err(new Error("Transport not connected"));
+  if (!transport.connected)
+    return createErr(new Error("Transport not connected"));
   try {
     const requestFrame = buildReadRequest(request, "ascii");
     const responseResult = await send(
@@ -143,8 +151,8 @@ async function read(
       request.functionCode,
       options.signal,
     );
-    if (!responseResult.success) return responseResult;
-    const responseData = responseResult.data;
+    if (isErr(responseResult)) return responseResult;
+    const responseData = unwrapOk(responseResult);
     let data: number[] = [];
     if (request.functionCode === 3 || request.functionCode === 4) {
       const full = Array.from(responseData);
@@ -162,9 +170,9 @@ async function read(
       slaveId: request.slaveId,
       timestamp: new Date(),
     };
-    return ok(response);
+    return createOk(response);
   } catch (e) {
-    return err(e as Error);
+    return createErr(e as Error);
   }
 }
 
@@ -173,7 +181,8 @@ async function write(
   request: WriteRequest,
   options: RequestOptions,
 ): Promise<Result<void, Error>> {
-  if (!transport.connected) return err(new Error("Transport not connected"));
+  if (!transport.connected)
+    return createErr(new Error("Transport not connected"));
   try {
     const requestFrame = buildWriteRequest(request, "ascii");
     const responseResult = await send(
@@ -183,10 +192,10 @@ async function write(
       request.functionCode,
       options.signal,
     );
-    if (!responseResult.success) return responseResult;
-    return ok(undefined);
+    if (isErr(responseResult)) return responseResult;
+    return createOk(undefined);
   } catch (e) {
-    return err(e as Error);
+    return createErr(e as Error);
   }
 }
 
@@ -200,7 +209,7 @@ async function send(
   return new Promise((resolve) => {
     if (signal?.aborted) {
       resolve(
-        err(
+        createErr(
           signal.reason instanceof Error ? signal.reason : new Error("Aborted"),
         ),
       );
@@ -209,7 +218,7 @@ async function send(
     const abortHandler = () => {
       cleanup();
       const r = signal?.reason;
-      resolve(err(r instanceof Error ? r : new Error("Aborted")));
+      resolve(createErr(r instanceof Error ? r : new Error("Aborted")));
     };
     let asciiBuffer = "";
     const onMessage = (ev: Event) => {
@@ -225,9 +234,10 @@ async function send(
         if (endIndex === -1) break;
         const frameString = asciiBuffer.substring(colonIndex, endIndex + 2);
         const validation = validateASCIIFrame(frameString);
-        if (validation.isValid && validation.frame) {
-          const unitId = validation.frame[0];
-          const functionCode = validation.frame[1];
+        if (isOk(validation)) {
+          const frame = unwrapOk(validation);
+          const unitId = frame[0];
+          const functionCode = frame[1];
           const isMatch =
             unitId === expectedUnitId &&
             (functionCode === expectedFunctionCode ||
@@ -235,10 +245,10 @@ async function send(
                 (functionCode & 0x7f) === expectedFunctionCode));
           if (isMatch) {
             if (functionCode & 0x80) {
-              const errorCode = validation.frame[2];
+              const errorCode = frame[2];
               cleanup();
               resolve(
-                err(
+                createErr(
                   new ModbusExceptionError(
                     errorCode as keyof typeof MODBUS_EXCEPTION_CODES,
                   ),
@@ -247,7 +257,7 @@ async function send(
               return;
             }
             cleanup();
-            resolve(ok(new Uint8Array(validation.frame)));
+            resolve(createOk(new Uint8Array(frame)));
             return;
           }
         }
@@ -263,7 +273,7 @@ async function send(
         (errorEvent as { error?: unknown }).error;
       const sourceErr = possible || new Error("Unknown error");
       resolve(
-        err(
+        createErr(
           sourceErr instanceof Error ? sourceErr : new Error(String(sourceErr)),
         ),
       );
@@ -278,7 +288,7 @@ async function send(
       transport.postMessage(requestFrame);
     } catch (error) {
       cleanup();
-      resolve(err(error as Error));
+      resolve(createErr(error as Error));
     }
   });
 }

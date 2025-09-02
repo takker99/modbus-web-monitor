@@ -1,3 +1,4 @@
+import { isOk, type Result, unwrapErr, unwrapOk } from "option-t/plain_result";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import {
   readCoils as asciiReadCoils,
@@ -12,7 +13,6 @@ import {
 import type { ModbusProtocol } from "../frameBuilder.ts";
 import type { WriteFunctionCode } from "../functionCodes.ts";
 import type { ModbusResponse } from "../modbus.ts";
-import { isOk, type Result } from "../result.ts";
 import {
   readCoils as rtuReadCoils,
   readDiscreteInputs as rtuReadDiscreteInputs,
@@ -220,14 +220,14 @@ export function App() {
         }
       }
       if (result && isOk(result)) {
-        const resp = result.data;
+        const resp = unwrapOk(result);
         setData((prev) => [...prev.slice(-99), resp]);
         addLog(
           "Info",
           `Modbus response (FC ${resp.functionCode}): received ${resp.data.length} values`,
         );
       } else if (result) {
-        addLog("Error", `Read error: ${result.error.message}`);
+        addLog("Error", `Read error: ${unwrapErr(result).message}`);
       }
     } catch (e) {
       addLog("Error", `Read error: ${(e as Error).message}`);
@@ -337,7 +337,7 @@ export function App() {
         }
       }
       if (result && !isOk(result)) {
-        addLog("Error", `Write error: ${result.error.message}`);
+        addLog("Error", `Write error: ${unwrapErr(result).message}`);
       } else {
         addLog("Info", `Write success (FC${fc})`);
       }

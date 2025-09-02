@@ -137,6 +137,7 @@ describe("SerialManager negative paths", () => {
   });
 });
 
+import { isOk } from "option-t/plain_result";
 import { readHoldingRegisters } from "../src/ascii.ts";
 import { readHoldingRegisters as readHoldingRegistersRTU } from "../src/rtu.ts";
 // Extra abort pre-check coverage for pure function APIs
@@ -155,8 +156,8 @@ describe("Abort pre-check coverage", () => {
     const asciiResult = await readHoldingRegisters(transport, 1, 0, 1, {
       signal: c.signal,
     });
-    expect(rtuResult.success).toBe(false);
-    expect(asciiResult.success).toBe(false);
+    expect(isOk(rtuResult)).toBe(false);
+    expect(isOk(asciiResult)).toBe(false);
   });
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */

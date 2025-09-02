@@ -1,7 +1,15 @@
 // Integration tests showing both class-based and pure function APIs working together
+
+import {
+  isErr,
+  isOk,
+  mapForResult,
+  unwrapErr,
+  unwrapOk,
+  unwrapOrForResult,
+} from "option-t/plain_result";
 import { beforeEach, describe, expect, it } from "vitest";
 import { calculateCRC16 } from "../src/crc.ts";
-import { isErr, isOk, map, unwrapOr } from "../src/result.ts";
 import { readHoldingRegisters, writeSingleRegister } from "../src/rtu.ts";
 import {
   MockTransport,
@@ -56,7 +64,7 @@ describe("API Integration", () => {
     expect(isOk(readResult)).toBe(true);
 
     if (isOk(readResult)) {
-      expect(readResult.data.data).toEqual([0x1234, 0x5678]);
+      expect(unwrapOk(readResult).data).toEqual([0x1234, 0x5678]);
     }
 
     // Test pure function API write
@@ -80,7 +88,7 @@ describe("API Integration", () => {
     });
     expect(isErr(readResult)).toBe(true);
     if (isErr(readResult)) {
-      expect(readResult.error.message).toMatch(/aborted/i);
+      expect(unwrapErr(readResult).message).toMatch(/aborted/i);
     }
 
     const c2 = new AbortController();
@@ -110,9 +118,9 @@ describe("API Integration", () => {
     const result = await readHoldingRegisters(transport, 1, 0, 1);
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
-      expect(result.error.message).toContain("Illegal data address");
+      expect(unwrapErr(result).message).toContain("Illegal data address");
       // Can handle error without try/catch
-      console.log("Functional API error:", result.error.message);
+      console.log("Functional API error:", unwrapErr(result).message);
     }
 
     // The Result type approach allows for more functional error handling:
@@ -140,13 +148,13 @@ describe("API Integration", () => {
     const result = await readHoldingRegisters(transport, 1, 0, 1);
 
     // Extract just the register value and double it
-    const doubledValue = result.success ? result.data.data[0] * 2 : 0;
+    const doubledValue = isOk(result) ? unwrapOk(result).data[0] * 2 : 0;
 
     expect(doubledValue).toBe(132); // 66 * 2
 
     // Or use functional composition
-    const extractedValue = map(result, (response) => response.data[0]);
-    const finalValue = unwrapOr(extractedValue, 0);
+    const extractedValue = mapForResult(result, (response) => response.data[0]);
+    const finalValue = unwrapOrForResult(extractedValue, 0);
 
     expect(finalValue).toBe(66);
   });
@@ -170,7 +178,7 @@ describe("API Integration", () => {
     const result = await readHoldingRegisters(transport, 1, 0, 1);
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
-      expect(result.error.message).toBe("Transport not connected");
+      expect(unwrapErr(result).message).toBe("Transport not connected");
     }
   });
 });

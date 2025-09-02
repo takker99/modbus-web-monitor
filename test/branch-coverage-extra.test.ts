@@ -1,3 +1,4 @@
+import { isOk } from "option-t/plain_result";
 import { describe, expect, it } from "vitest";
 import { calculateCRC16 } from "../src/crc.ts";
 import { parseRTUFrame, validateRTUFrame } from "../src/frameParser.ts";
@@ -38,30 +39,30 @@ describe("RTU frame CRC failure branch", () => {
     const bad = [...good];
     bad[bad.length - 1] ^= 0xff; // corrupt high byte of CRC
     const result = parseRTUFrame(bad);
-    expect(result.success).toBe(false);
+    expect(isOk(result)).toBe(false);
   });
 });
 
 describe("validateRTUFrame error variants", () => {
   it("too short", () => {
     const r = validateRTUFrame([1, 3, 0]);
-    expect(r.isValid).toBe(false);
+    expect(isOk(r)).toBe(false);
   });
   it("invalid function code", () => {
     const frame = withCRC([1, 99, 0, 0]);
     const r = validateRTUFrame(frame);
-    expect(r.isValid).toBe(false);
+    expect(isOk(r)).toBe(false);
   });
   it("incomplete frame", () => {
     // FC3 with byte count 2 requires 3+2+2=7 bytes; provide less
     const partial = [1, 3, 2, 0x00];
     const r = validateRTUFrame(partial);
-    expect(r.isValid).toBe(false);
+    expect(isOk(r)).toBe(false);
   });
   it("crc error", () => {
     const full = withCRC([1, 6, 0x00, 0x10, 0x00, 0x01]);
     full[full.length - 2] ^= 0xaa;
     const r = validateRTUFrame(full);
-    expect(r.isValid).toBe(false);
+    expect(isOk(r)).toBe(false);
   });
 });

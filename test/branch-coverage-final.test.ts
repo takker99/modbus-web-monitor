@@ -1,3 +1,4 @@
+import { isOk, unwrapErr } from "option-t/plain_result";
 import { describe, expect, it } from "vitest";
 import { buildWriteRequest } from "../src/frameBuilder.ts";
 import { parseRTUFrame, validateRTUFrame } from "../src/frameParser.ts";
@@ -27,17 +28,19 @@ describe("Additional branch coverage final", () => {
     // Need buffer shorter than expectedLength to hit incomplete frame branch
     const partial = [1, 3, 4, 0x12, 0x34]; // missing remaining bytes + crc
     const result = parseRTUFrame(partial);
-    if (result.success) {
+    if (isOk(result)) {
       throw new Error("Should not parse incomplete frame successfully");
     }
-    expect(result.error.message).toMatch(/Incomplete frame/);
+    expect(unwrapErr(result).message).toMatch(/Incomplete frame/);
   });
 
   it("validateRTUFrame incomplete frame for FC5", () => {
     // FC5 expected length 8, provide only 7
     const frame = [1, 5, 0x00, 0x10, 0xff, 0x00, 0x12];
     const res = validateRTUFrame(frame);
-    expect(res.isValid).toBe(false);
-    expect(res.error?.message).toMatch(/Incomplete frame|RTU frame too short/);
+    expect(isOk(res)).toBe(false);
+    expect(unwrapErr(res).message).toMatch(
+      /Incomplete frame|RTU frame too short/,
+    );
   });
 });

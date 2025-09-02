@@ -1,5 +1,13 @@
 // RTU-specific pure function API extracted from pure-functions.ts
 // Provides a functional interface for Modbus RTU without bundling ASCII logic
+import {
+  createErr,
+  createOk,
+  isErr,
+  isOk,
+  type Result,
+  unwrapOk,
+} from "option-t/plain_result";
 import { type MODBUS_EXCEPTION_CODES, ModbusExceptionError } from "./errors.ts";
 import { buildReadRequest, buildWriteRequest } from "./frameBuilder.ts";
 import {
@@ -14,8 +22,6 @@ import type {
   RequestOptions,
   WriteRequest,
 } from "./modbus.ts";
-import type { Result } from "./result.ts";
-import { err, ok } from "./result.ts";
 import type { IModbusTransport } from "./transport/transport.ts";
 
 export async function readCoils(
@@ -134,7 +140,8 @@ async function read(
   request: ReadRequest,
   options: RequestOptions,
 ): Promise<Result<ModbusResponse, Error>> {
-  if (!transport.connected) return err(new Error("Transport not connected"));
+  if (!transport.connected)
+    return createErr(new Error("Transport not connected"));
   try {
     const requestFrame = buildReadRequest(request, "rtu");
     const responseResult = await send(
@@ -144,8 +151,8 @@ async function read(
       request.functionCode,
       options.signal,
     );
-    if (!responseResult.success) return responseResult;
-    const responseData = responseResult.data;
+    if (isErr(responseResult)) return responseResult;
+    const responseData = unwrapOk(responseResult);
     let data: number[] = [];
     if (request.functionCode === 3 || request.functionCode === 4) {
       const dataLength = responseData[2];
@@ -161,9 +168,9 @@ async function read(
       slaveId: request.slaveId,
       timestamp: new Date(),
     };
-    return ok(response);
+    return createOk(response);
   } catch (e) {
-    return err(e as Error);
+    return createErr(e as Error);
   }
 }
 
@@ -172,7 +179,8 @@ async function write(
   request: WriteRequest,
   options: RequestOptions,
 ): Promise<Result<void, Error>> {
-  if (!transport.connected) return err(new Error("Transport not connected"));
+  if (!transport.connected)
+    return createErr(new Error("Transport not connected"));
   try {
     const requestFrame = buildWriteRequest(request, "rtu");
     const responseResult = await send(
@@ -182,10 +190,10 @@ async function write(
       request.functionCode,
       options.signal,
     );
-    if (!responseResult.success) return responseResult;
-    return ok(undefined);
+    if (isErr(responseResult)) return responseResult;
+    return createOk(undefined);
   } catch (e) {
-    return err(e as Error);
+    return createErr(e as Error);
   }
 }
 
@@ -199,7 +207,7 @@ async function send(
   return new Promise((resolve) => {
     if (signal?.aborted) {
       resolve(
-        err(
+        createErr(
           signal.reason instanceof Error ? signal.reason : new Error("Aborted"),
         ),
       );
@@ -208,7 +216,9 @@ async function send(
     const abortHandler = () => {
       cleanup();
       const reason = signal && (signal as AbortSignal).reason;
-      resolve(err(reason instanceof Error ? reason : new Error("Aborted")));
+      resolve(
+        createErr(reason instanceof Error ? reason : new Error("Aborted")),
+      );
     };
     const buffer: number[] = [];
     const onMessage = (ev: Event) => {
@@ -232,7 +242,7 @@ async function send(
             const errorCode = buffer[2];
             cleanup();
             resolve(
-              err(
+              createErr(
                 new ModbusExceptionError(
                   errorCode as keyof typeof MODBUS_EXCEPTION_CODES,
                 ),
@@ -250,9 +260,9 @@ async function send(
         if (buffer.length >= expectedLength) {
           const frame = buffer.slice(0, expectedLength);
           const validation = validateRTUFrame(frame);
-          if (validation.isValid) {
+          if (isOk(validation)) {
             cleanup();
-            resolve(ok(new Uint8Array(frame)));
+            resolve(createOk(new Uint8Array(frame)));
             return;
           } else {
             buffer.shift();
@@ -270,7 +280,7 @@ async function send(
         (errorEvent as { error?: unknown }).error;
       const sourceErr = possible || new Error("Unknown error");
       resolve(
-        err(
+        createErr(
           sourceErr instanceof Error ? sourceErr : new Error(String(sourceErr)),
         ),
       );
@@ -289,7 +299,7 @@ async function send(
       transport.postMessage(requestFrame);
     } catch (error) {
       cleanup();
-      resolve(err(error as Error));
+      resolve(createErr(error as Error));
     }
   });
 }

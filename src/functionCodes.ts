@@ -64,5 +64,5 @@ export function isBitBasedFunctionCode(code: number): code is 1 | 2 {
  * @param code - Numeric function code
  */
 export function isRegisterBasedFunctionCode(code: number): code is 3 | 4 {
-  return code === 3 || code === 4
+  return code === 3 || code === 4;
 }
