@@ -11,6 +11,7 @@ import {
   writeSingleRegister as asciiWriteSingleRegister,
 } from "../ascii.ts";
 import type { ModbusProtocol } from "../frameBuilder.ts";
+import { buildReadRequest, buildWriteRequest } from "../frameBuilder.ts";
 import type { WriteFunctionCode } from "../functionCodes.ts";
 import type { ModbusResponse } from "../modbus.ts";
 import {
@@ -24,6 +25,8 @@ import {
   writeSingleRegister as rtuWriteSingleRegister,
 } from "../rtu.ts";
 import type { SerialConfig, SerialManager } from "../serial.ts";
+// 直接 SerialTransport を利用
+import { SerialTransport } from "../transport/serial-transport.ts";
 // --- SerialManager を IModbusTransport へアダプト ---
 import type { IModbusTransport } from "../transport/transport.ts";
 import { ConnectionSettingsPanel } from "./components/ConnectionSettingsPanel.tsx";
@@ -40,7 +43,6 @@ import {
   formatAddress as utilFormatAddress,
   formatValue as utilFormatValue,
 } from "./modbusUtils.ts";
-import { SerialManagerTransport } from "./SerialManagerTransport.ts";
 
 // Extended interface for the UI state (includes additional fields for multi-value input)
 interface ModbusWriteUIConfig {
@@ -124,9 +126,14 @@ export function App() {
 
     // Event listeners setup
     if (!transportRef.current) {
-      transportRef.current = new SerialManagerTransport(
+      // SerialTransport は内部で port 選択も行う connect() 前提。
+      // 既存の SerialManager (useSerial) を再利用するため第二引数に渡す。
+      transportRef.current = new SerialTransport(
+        {
+          ...serialConfig,
+          type: "serial",
+        },
         serialManager as SerialManager,
-        addLog,
       );
     }
 
@@ -179,6 +186,24 @@ export function App() {
     if (!transport) {
       addLog("Error", "Transport not ready");
       return;
+    }
+    // 低レベル送信フレームを構築しログ (RTU/ASCII 切替)
+    try {
+      const frame = buildReadRequest(
+        {
+          address: startAddress,
+          functionCode, // 1|2|3|4
+          quantity,
+          slaveId,
+        },
+        protocol,
+      );
+      const hex = Array.from(frame)
+        .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
+        .join(" ");
+      addLog("Sent", hex);
+    } catch (e) {
+      addLog("Warning", `Frame build failed (read): ${(e as Error).message}`);
     }
     const commonArgs: [IModbusTransport, number, number, number] = [
       transport,
@@ -258,6 +283,27 @@ export function App() {
           ? Number.parseInt(writeConfig.value, 16)
           : Number.parseInt(writeConfig.value, 10);
         if (Number.isNaN(value)) throw new Error("Invalid value format");
+      }
+      // 低レベル送信フレームを構築しログ
+      try {
+        const frame = buildWriteRequest(
+          {
+            address: writeConfig.address,
+            functionCode: fc,
+            slaveId,
+            value: value,
+          },
+          protocol,
+        );
+        const hex = Array.from(frame)
+          .map((b) => `0x${b.toString(16).padStart(2, "0")}`)
+          .join(" ");
+        addLog("Sent", hex);
+      } catch (e) {
+        addLog(
+          "Warning",
+          `Frame build failed (write): ${(e as Error).message}`,
+        );
       }
       let result: Result<void, Error> | undefined;
       const t = transportRef.current;

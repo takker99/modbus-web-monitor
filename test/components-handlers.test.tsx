@@ -5,18 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConnectionSettingsPanel } from "../src/frontend/components/ConnectionSettingsPanel.tsx";
 import { ReadPanel } from "../src/frontend/components/ReadPanel.tsx";
 import { WritePanel } from "../src/frontend/components/WritePanel.tsx";
-import { SerialManagerTransport } from "../src/frontend/SerialManagerTransport.ts";
-
-// simple stub for SerialManager
-class SM {
-  connected = true;
-  async disconnect() {}
-  async send() {
-    return Promise.resolve();
-  }
-  on() {}
-  off() {}
-}
 
 // Ensure DOM is cleared between tests to avoid duplicate label conflicts
 afterEach(() => cleanup());
@@ -191,14 +179,5 @@ describe("ReadPanel handlers", () => {
     });
     expect(setRead).toHaveBeenCalledTimes(3);
     expect(onPI).toHaveBeenCalledWith(1500);
-  });
-});
-
-describe("SerialManagerTransport connect noop", () => {
-  it("exercises connect method", async () => {
-    const sm = new SM();
-    const t = new SerialManagerTransport(sm as unknown as never, () => {});
-    await t.connect();
-    expect(t.connected).toBe(true);
   });
 });

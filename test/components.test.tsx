@@ -7,19 +7,7 @@ import { DataDisplayPanel } from "../src/frontend/components/DataDisplayPanel.ts
 import { PortDisconnectedBanner } from "../src/frontend/components/PortDisconnectedBanner.tsx";
 import { ReadPanel } from "../src/frontend/components/ReadPanel.tsx";
 import { WritePanel } from "../src/frontend/components/WritePanel.tsx";
-import { SerialManagerTransport } from "../src/frontend/SerialManagerTransport.ts";
 import type { ModbusResponse } from "../src/modbus.ts";
-import { SerialManager } from "../src/serial.ts";
-
-// Mocks
-class DummySerialManager extends SerialManager {
-  override async disconnect() {
-    /* noop */
-  }
-  override async send(_d: Uint8Array) {
-    /* noop */
-  }
-}
 
 function makeResp(fc: number, data: number[]): ModbusResponse {
   return {
@@ -181,18 +169,5 @@ describe("DataDisplayPanel", () => {
     expect(screen.getByText("10")).not.toBeNull();
     fireEvent.click(screen.getByTitle(/copy this log/i));
     expect(onCopyEntry).toHaveBeenCalled();
-  });
-});
-
-describe("SerialManagerTransport adapter", () => {
-  it("logs Sent on postMessage and proxies connection state", async () => {
-    const sm = new DummySerialManager();
-    const logs: string[] = [];
-    const adapter = new SerialManagerTransport(sm, (t, m) =>
-      logs.push(`${t}:${m}`),
-    );
-    expect(adapter.connected).toBe(false);
-    adapter.postMessage(new Uint8Array([0x01, 0x02]));
-    expect(logs[0]).toMatch(/Sent:0x01 0x02/);
   });
 });

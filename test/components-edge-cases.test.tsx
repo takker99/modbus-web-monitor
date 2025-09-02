@@ -3,7 +3,6 @@
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
 import { WritePanel } from "../src/frontend/components/WritePanel.tsx";
-import { SerialManagerTransport } from "../src/frontend/SerialManagerTransport.ts";
 
 // Focus: cover WritePanel disabled logic branches & SerialManagerTransport error listener abort branch
 
@@ -57,48 +56,5 @@ describe("WritePanel edge cases", () => {
       .getAllByRole("button", { name: /write/i })
       .pop() as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
-  });
-});
-
-// Minimal SerialManager stub capturing off() removal on abort (already covered; add extra call path)
-type Listener = (arg: unknown) => void;
-class SM {
-  connected = true;
-  listeners: Record<string, Listener[]> = {};
-  on(ev: string, fn: Listener) {
-    if (!this.listeners[ev]) this.listeners[ev] = [];
-    this.listeners[ev].push(fn);
-  }
-  off(ev: string, fn: Listener) {
-    this.listeners[ev] = (this.listeners[ev] || []).filter((f) => f !== fn);
-  }
-  async disconnect() {}
-  async send() {
-    return;
-  }
-  emit(ev: string, arg: unknown) {
-    for (const f of this.listeners[ev] || []) f(arg);
-  }
-}
-
-describe("SerialManagerTransport abort error listener removal", () => {
-  it("removes error listener after abort signal", async () => {
-    const sm = new SM();
-    const transport = new SerialManagerTransport(
-      sm as unknown as never,
-      () => {},
-    );
-    const ac = new AbortController();
-    const calls: Error[] = [];
-    transport.addEventListener(
-      "error",
-      (ev: CustomEvent<Error>) => calls.push(ev.detail),
-      { signal: ac.signal },
-    );
-    // cause abort
-    ac.abort();
-    // emit after abort - should not push
-    sm.emit("error", new Error("later"));
-    expect(calls.length).toBe(0);
   });
 });

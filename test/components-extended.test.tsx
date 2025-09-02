@@ -5,43 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { ConnectionSettingsPanel } from "../src/frontend/components/ConnectionSettingsPanel.tsx";
 import { ReadPanel } from "../src/frontend/components/ReadPanel.tsx";
 import { WritePanel } from "../src/frontend/components/WritePanel.tsx";
-import { SerialManagerTransport } from "../src/frontend/SerialManagerTransport.ts";
-
-// Minimal SerialManager stub for adapter tests
-type Listener<T> = (arg: T) => void;
-class StubSerialManager {
-  listeners: Record<string, Array<Listener<unknown>>> = {};
-  connected = true;
-  async disconnect() {
-    this.connected = false;
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async send(_d: Uint8Array) {
-    return Promise.resolve();
-  }
-  on<T>(ev: string, fn: Listener<T>) {
-    if (!this.listeners[ev]) this.listeners[ev] = [];
-    this.listeners[ev].push(fn as Listener<unknown>);
-  }
-  off<T>(ev: string, fn: Listener<T>) {
-    this.listeners[ev] = (this.listeners[ev] || []).filter((f) => f !== fn);
-  }
-  emit<T>(ev: string, arg: T) {
-    for (const f of this.listeners[ev] || []) (f as Listener<T>)(arg);
-  }
-}
-
-class FailingSendSerialManager extends StubSerialManager {
-  async send(_d: Uint8Array): Promise<void> {
-    return new Promise((_, reject) =>
-      queueMicrotask(() => {
-        const err = new Error("fail send");
-        this.emit("error", err);
-        reject(err);
-      }),
-    );
-  }
-}
 
 describe("WritePanel extended scenarios", () => {
   it("enables write for multi coil (15) when values entered (simplified without state updates)", () => {
@@ -159,46 +122,5 @@ describe("ReadPanel extra states", () => {
       />,
     );
     expect(screen.getByRole("button", { name: /stop monitor/i })).toBeTruthy();
-  });
-});
-
-describe("SerialManagerTransport event paths", () => {
-  it("dispatches message event and removes listener on abort", () => {
-    const sm = new StubSerialManager();
-    const logs: string[] = [];
-    const transport = new SerialManagerTransport(
-      sm as unknown as never,
-      (t, m) => logs.push(`${t}:${m}`),
-    );
-    const ac = new AbortController();
-    const messages: Uint8Array[] = [];
-    transport.addEventListener(
-      "message",
-      (ev: CustomEvent<Uint8Array>) => messages.push(ev.detail),
-      { signal: ac.signal },
-    );
-    sm.emit("data", new Uint8Array([1, 2, 3]));
-    expect(messages.length).toBe(1);
-    ac.abort();
-    sm.emit("data", new Uint8Array([4]));
-    expect(messages.length).toBe(1); // no new after abort
-  });
-  it("dispatches error event when send rejects", async () => {
-    const sm = new FailingSendSerialManager();
-    const errors: Error[] = [];
-    const transport = new SerialManagerTransport(
-      sm as unknown as never,
-      () => {},
-    );
-    transport.addEventListener("error", (ev: CustomEvent<Error>) =>
-      errors.push(ev.detail),
-    );
-    transport.postMessage(new Uint8Array([0x01]));
-    // flush queued microtasks/timeouts
-    await new Promise((r) => setTimeout(r, 0));
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(errors.length).toBe(1);
-    expect(errors[0]).toBeInstanceOf(Error);
   });
 });

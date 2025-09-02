@@ -72,7 +72,7 @@ describe("transport: minimal", () => {
       );
     });
     it("async send error dispatch", async () => {
-      (serial as unknown as { _state: string })._state = "connected";
+      (serial as unknown as { state: string }).state = "connected";
       const e = new Error("fail");
       vi.spyOn(
         (
