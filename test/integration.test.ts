@@ -1,20 +1,21 @@
 // Integration tests showing both class-based and pure function APIs working together
+
+import {
+  isErr,
+  isOk,
+  mapForResult,
+  unwrapErr,
+  unwrapOk,
+  unwrapOrForResult,
+} from "option-t/plain_result";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  readHoldingRegisters,
-  writeSingleRegister,
-} from "../src/api/pure-functions.ts";
 import { calculateCRC16 } from "../src/crc.ts";
-import { ModbusClient } from "../src/modbus.ts";
-import {
-  MockTransport,
-  type MockTransportConfig,
-} from "../src/transport/index.ts";
-import { isErr, isOk, map, unwrapOr } from "../src/types/result.ts";
+import { readHoldingRegisters, writeSingleRegister } from "../src/rtu.ts";
+import { MockTransport } from "../src/transport/mock-transport.ts";
+import type { MockTransportConfig } from "../src/transport/transport.ts";
 
 describe("API Integration", () => {
   let transport: MockTransport;
-  let client: ModbusClient;
 
   beforeEach(async () => {
     // Set up mock transport
@@ -27,10 +28,6 @@ describe("API Integration", () => {
     await transport.connect();
     transport.clearSentData();
     transport.clearAutoResponses();
-
-    // Set up class-based client
-    client = new ModbusClient();
-    client.protocol = "rtu";
   });
 
   it("should work with both APIs simultaneously", async () => {
@@ -65,8 +62,7 @@ describe("API Integration", () => {
     expect(isOk(readResult)).toBe(true);
 
     if (isOk(readResult)) {
-      expect(readResult.data.data).toEqual([0x1234, 0x5678]);
-      expect(readResult.data.functionCodeLabel).toBe("Holding Registers");
+      expect(unwrapOk(readResult).data).toEqual([0x1234, 0x5678]);
     }
 
     // Test pure function API write
@@ -81,26 +77,24 @@ describe("API Integration", () => {
     expect(sentData[1]).toEqual(new Uint8Array(writeRequest));
   });
 
-  it("should handle errors gracefully in both APIs", async () => {
-    // Don't set up any auto-responses to trigger timeouts
-
-    // Test pure function API timeout
+  it("should handle errors gracefully in both APIs (abort driven)", async () => {
+    // Simulate user-driven cancellation instead of implicit timeout
+    const c1 = new AbortController();
+    c1.abort(new Error("Aborted"));
     const readResult = await readHoldingRegisters(transport, 1, 0, 1, {
-      timeout: 50,
+      signal: c1.signal,
     });
     expect(isErr(readResult)).toBe(true);
     if (isErr(readResult)) {
-      expect(readResult.error.message).toBe("Request timeout");
+      expect(unwrapErr(readResult).message).toMatch(/aborted/i);
     }
 
-    // Test pure function API write timeout
+    const c2 = new AbortController();
+    c2.abort();
     const writeResult = await writeSingleRegister(transport, 1, 0, 123, {
-      timeout: 50,
+      signal: c2.signal,
     });
     expect(isErr(writeResult)).toBe(true);
-    if (isErr(writeResult)) {
-      expect(writeResult.error.message).toBe("Request timeout");
-    }
   });
 
   it("should demonstrate different error handling approaches", async () => {
@@ -122,9 +116,9 @@ describe("API Integration", () => {
     const result = await readHoldingRegisters(transport, 1, 0, 1);
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
-      expect(result.error.message).toContain("Illegal data address");
+      expect(unwrapErr(result).message).toContain("Illegal data address");
       // Can handle error without try/catch
-      console.log("Functional API error:", result.error.message);
+      console.log("Functional API error:", unwrapErr(result).message);
     }
 
     // The Result type approach allows for more functional error handling:
@@ -152,37 +146,25 @@ describe("API Integration", () => {
     const result = await readHoldingRegisters(transport, 1, 0, 1);
 
     // Extract just the register value and double it
-    const doubledValue = result.success ? result.data.data[0] * 2 : 0;
+    const doubledValue = isOk(result) ? unwrapOk(result).data[0] * 2 : 0;
 
     expect(doubledValue).toBe(132); // 66 * 2
 
     // Or use functional composition
-    const extractedValue = map(result, (response) => response.data[0]);
-    const finalValue = unwrapOr(extractedValue, 0);
+    const extractedValue = mapForResult(result, (response) => response.data[0]);
+    const finalValue = unwrapOrForResult(extractedValue, 0);
 
     expect(finalValue).toBe(66);
   });
 
-  it("should demonstrate transport state management", async () => {
-    // Test transport state changes
-    expect(transport.state).toBe("connected");
+  it("should error when using pure API after manual disconnect", async () => {
     expect(transport.connected).toBe(true);
-
-    const stateChanges: string[] = [];
-    transport.on("stateChange", (state) => {
-      stateChanges.push(state);
-    });
-
     await transport.disconnect();
-    expect(transport.state).toBe("disconnected");
     expect(transport.connected).toBe(false);
-    expect(stateChanges).toContain("disconnected");
-
-    // Try to use pure function API with disconnected transport
     const result = await readHoldingRegisters(transport, 1, 0, 1);
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
-      expect(result.error.message).toBe("Transport not connected");
+      expect(unwrapErr(result).message).toBe("Transport not connected");
     }
   });
 });

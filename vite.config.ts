@@ -6,7 +6,7 @@ export default defineConfig({
     outDir: "dist",
     rollupOptions: {
       input: {
-        main: "./index.html",
+        main: "./src/frontend/index.html",
       },
     },
     sourcemap: true,
@@ -17,7 +17,7 @@ export default defineConfig({
       "@": "/src",
     },
   },
-  root: ".",
+  root: "./src/frontend/",
   server: {
     open: true,
     port: 3000,

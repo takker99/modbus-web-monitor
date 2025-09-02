@@ -1,8 +1,8 @@
 # Modbus Web Monitor
 
-Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Serial API and Preact. It lets you connect to a serial Modbus device directly from Chrome (or any Chromium browser supporting Web Serial), send read/write requests, monitor periodic polling, and inspect raw frames.
+[![codecov](https://codecov.io/gh/takker99/modbus-web-monitor/branch/main/graph/badge.svg)](https://codecov.io/gh/takker99/modbus-web-monitor)
 
-> This tool was originally prototyped in Japanese; all UI and source comments have been translated to English.
+Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Serial API and Preact. It lets you connect to a serial Modbus device directly from Chrome (or any Chromium browser supporting Web Serial), send read/write requests, monitor periodic polling, and inspect raw frames.
 
 ## Features
 
@@ -14,30 +14,8 @@ Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Ser
 - Hex or decimal display toggle for register values & addresses
 - Real‑time communication log (TX/RX) with copy single / copy all and automatic trimming
 - CRC16 (RTU) and LRC (ASCII) validation for frame integrity
-- Simple buffering & response correlation with timeout handling
+- Simple buffering & response correlation (caller-controlled cancellation via AbortSignal)
 - Clean, responsive UI (desktop & mobile)
-
-## Coverage
-
-Code coverage reports are automatically generated and uploaded for each CI run. The project maintains comprehensive test coverage for core Modbus protocol functionality.
-
-[![codecov](https://codecov.io/gh/takker99/modbus-web-monitor/branch/main/graph/badge.svg)](https://codecov.io/gh/takker99/modbus-web-monitor)
-
-### Running Coverage Locally
-
-```bash
-# Generate coverage report
-pnpm test:coverage
-
-# View HTML report
-open coverage/index.html
-```
-
-Coverage reports include:
-- Line, branch, and function coverage metrics
-- Detailed per-file coverage analysis
-- HTML report with uncovered line highlighting
-- LCOV format for CI integration
 
 ## Roadmap Ideas (Not yet implemented)
 
@@ -50,13 +28,147 @@ Coverage reports include:
 
 | Layer | File(s) | Responsibility |
 |-------|---------|---------------|
-| UI (React-like) | `src/App.tsx` | Preact component implementation of the full UI (current active path) |
-| Legacy DOM UI (non-Preact) | `src/ui.ts` + `src/main.ts` | Earlier vanilla DOM event driven UI (still present; not used when using `main.tsx`) |
-| Modbus protocol | `src/modbus.ts` | Building requests, parsing RTU/ASCII responses, CRC/LRC validation, monitoring loop |
-| Serial abstraction | `src/serial.ts` | Web Serial API wrapper + event emitter |
-| Types | `src/types.ts` | Shared TypeScript interfaces |
+| UI (Preact) | `src/frontend/App.tsx` | Component implementation of the full UI |
+| Pure Modbus API | `src/rtu.ts`, `src/ascii.ts`, `src/frameBuilder.ts`, `src/frameParser.ts` | Pure, side‑effect free request frame build + parse functions (RTU & ASCII) |
+| Transport abstraction | `src/transport/*` | Swappable transports (Serial / Mock / TCP placeholder) implementing a minimal event API |
+| Low-level serial wrapper | `src/serial.ts` | Web Serial API wrapper + typed EventEmitter |
+| Errors & helpers | `src/errors.ts`, `src/functionCodes.ts`, `src/crc.ts`, `src/lrc.ts` | Shared utilities / error types |
 
-The Preact entry point is `index.html` -> `src/main.tsx` -> `App`.
+Entry point: `index.html` -> `src/frontend/main.tsx` -> `App`.
+
+Legacy class-based Modbus client code has been replaced by a transport + pure function API (see below). The previous class facade is intentionally omitted for a smaller surface and easier testing.
+
+## Transport Abstraction
+
+The transport layer provides a unified, MessagePort-like interface for different communication backends.
+
+### Built-in Transports
+
+- `SerialTransport` – Web Serial API
+- `MockTransport` – Deterministic test / development transport (auto responses, error injection)
+- `TcpTransport` – Placeholder (throws in browsers; add a WebSocket bridge instead)
+
+You can create transports directly or via the registry helper.
+
+```ts
+import { createTransport, SerialTransport } from "./src/transport";
+import type { SerialTransportConfig } from "./src/transport";
+
+const cfg: SerialTransportConfig = {
+  type: "serial",
+  baudRate: 9600,
+  dataBits: 8,
+  parity: "none",
+  stopBits: 1,
+};
+
+// Using helper
+const transport = createTransport(cfg);
+await transport.connect();
+
+transport.addEventListener("message", (ev) => {
+  console.log("RX", Array.from(ev.detail));
+});
+
+// Raw write (already framed Modbus RTU/ASCII bytes)
+transport.postMessage(new Uint8Array([1,3,0,0,0,1,0x84,0x0A]));
+```
+
+### Mock Transport Example
+
+```ts
+import { MockTransport, type MockTransportConfig } from "./src/transport";
+
+const mockCfg: MockTransportConfig = { type: "mock", name: "demo" };
+const mock = new MockTransport(mockCfg, { connectDelay: 50 });
+await mock.connect();
+
+// Auto response: when request bytes match, reply automatically
+const request = new Uint8Array([1,3,0,0,0,1]);
+const response = new Uint8Array([1,3,2,0x12,0x34]);
+mock.setAutoResponse(request, response);
+
+mock.addEventListener("message", (ev) => {
+  console.log("Mock RX", ev.detail);
+});
+
+mock.postMessage(request); // Will trigger response shortly
+```
+
+### Transport Events
+
+| Event | Detail | When |
+|-------|--------|------|
+| `open` | - | Successful connect |
+| `close` | - | Graceful or unexpected disconnect |
+| `statechange` | `TransportState` | Any state transition |
+| `message` | `Uint8Array` | Raw received frame bytes |
+| `error` | `Error` | Transport-level error |
+
+## Pure Function Modbus API
+
+High-level Modbus operations are exposed as pure async functions operating on an `IModbusTransport` instance. They return `Result<T, Error>` objects (from `option-t/plain_result`) instead of throwing for predictable error handling.
+
+Two protocol modules exist: `rtu.ts` and `ascii.ts` (function names are the same).
+
+### Reading
+
+```ts
+import { readHoldingRegisters } from "./src/rtu"; // or "./src/ascii"
+import { isOk } from "option-t/plain_result";
+
+const res = await readHoldingRegisters(transport, 1, 0, 10);
+if (isOk(res)) {
+  console.log("Registers", res.ok.data);
+}
+```
+
+### Writing
+
+```ts
+import { writeSingleRegister, writeMultipleRegisters } from "./src/rtu";
+import { isErr } from "option-t/plain_result";
+
+const r1 = await writeSingleRegister(transport, 1, 100, 0x1234);
+const r2 = await writeMultipleRegisters(transport, 1, 0, [0x1234, 0x5678]);
+for (const r of [r1, r2]) if (isErr(r)) console.error(r.err.message);
+```
+
+### Abort / Cancellation
+
+Each read/write accepts `{ signal?: AbortSignal }` in the final options parameter. Provide an `AbortController` to enforce timeouts.
+
+```ts
+const controller = new AbortController();
+setTimeout(() => controller.abort(new Error("Timeout")), 1500);
+const result = await readCoils(transport, 1, 0, 16, { signal: controller.signal });
+```
+
+### Result Helpers
+
+The project uses the functional Result type from `option-t`:
+
+| Helper | Purpose |
+|--------|---------|
+| `createOk(data)` | Construct success result |
+| `createErr(error)` | Construct error result |
+| `isOk(r)` / `isErr(r)` | Type guards |
+| `unwrapOk(r)` | Extract value (assumes Ok) |
+
+### Why Result Instead of Exceptions?
+
+- Avoids try/catch in hot paths
+- Composable transformations / branching
+- Easier test assertions (no thrown side effects)
+
+## Benefits Summary
+
+| Aspect | Transport Abstraction | Pure Function API |
+|--------|-----------------------|-------------------|
+| Testability | Mock transport, deterministic timing | No hidden state, simple inputs/outputs |
+| Extensibility | Register new transports dynamically | Compose new higher operations easily |
+| Error Handling | Structured events & explicit states | Explicit `Result` objects |
+| Tree Shaking | Import only needed transports | Import only used operations |
 
 ## Function Code Type Safety
 
@@ -76,7 +188,7 @@ interface ModbusReadConfig {
 }
 
 interface ModbusWriteConfig {
-  functionCode: WriteFunctionCode  // Only 5|6|15|16 allowed  
+  functionCode: WriteFunctionCode  // Only 5|6|15|16 allowed
   // ... other properties
 }
 ```
@@ -128,7 +240,7 @@ pnpm preview
 4. Press "Connect".
 5. For a single read: choose a function code (e.g. Holding Registers = FC03), start address, and quantity; click "Read".
 6. To start periodic polling: click "Start Monitor" (click again to stop). Default interval is 1000 ms; adjust in `App.tsx` or `modbus.ts` if needed.
-7. To write: 
+7. To write:
    - **Single writes (FC05/06)**: Select function (05 coil / 06 single register), address, and value (prefix with `0x` for hex) then click "Write".
    - **Multi-coil writes (FC15)**: Select "15 - Write Multiple Coils", enter start address, and provide comma or space-separated coil values (0 or 1). Max 1968 coils.
    - **Multi-register writes (FC16)**: Select "16 - Write Multiple Registers", enter start address, and provide comma/space/line-separated register values (0-65535). Max 123 registers.
@@ -186,7 +298,7 @@ The FC06 interface allows you to write a single register value. Enter the regist
 
 The FC15 interface allows you to write multiple coils at once. Enter coil values as comma or space-separated bits (0 or 1), with a maximum of 1968 coils.
 
-### FC16 - Write Multiple Registers Interface  
+### FC16 - Write Multiple Registers Interface
 
 ![FC16 Multi-Register Write Interface](https://github.com/user-attachments/assets/812d1fb4-328f-4f5e-b04d-e2f05985c36c)
 
@@ -233,16 +345,13 @@ Example read request (FC03):
 The ASCII implementation handles:
 - Proper frame detection (`:` start, `\r\n` end)
 - Hex decoding with validation
-- LRC calculation and verification  
+- LRC calculation and verification
 - Buffer management for partial/concatenated frames
 - Error handling identical to RTU (LRC mismatch triggers error event)
 
-## Error / Exception Handling
+## Error / Exception Handling & Cancellation
 
-- Pending request queue: only one outstanding at a time; attempts while busy reject.
-- 3 second timeout clears pending state.
-- On Modbus exception (function | 0x80), the code is mapped and surfaced in logs.
-- CRC mismatch triggers an error and buffer reset for that frame.
+Pure functions perform a single in-flight request per call; concurrency control is handled by the caller (UI serialises by design). Provide an `AbortSignal` for timeouts. Modbus exception frames (function code | 0x80) become `ModbusExceptionError`. Corrupted frames trigger CRC / LRC specific errors; RTU logic attempts resync scanning for plausible frame starts before discarding.
 
 ## Troubleshooting
 
@@ -337,13 +446,13 @@ This application provides full support for standard Modbus read and write operat
 
 ### Read Operations
 - **FC01 - Read Coils**: Digital outputs/coils status (read/write bits)
-- **FC02 - Read Discrete Inputs**: Digital inputs status (read-only bits)  
+- **FC02 - Read Discrete Inputs**: Digital inputs status (read-only bits)
 - **FC03 - Read Holding Registers**: Analog/data registers (read/write registers)
 - **FC04 - Read Input Registers**: Input/measurement registers (read-only registers)
 
 ### Write Operations
 - **FC05 - Write Single Coil**: Write single digital output
-- **FC06 - Write Single Register**: Write single analog/data register  
+- **FC06 - Write Single Register**: Write single analog/data register
 - **FC15 - Write Multiple Coils**: Write multiple digital outputs (up to 1968 coils)
 - **FC16 - Write Multiple Registers**: Write multiple registers (up to 123 registers)
 
@@ -379,14 +488,14 @@ This project has comprehensive test coverage for the Modbus protocol implementat
 ### Test Categories
 
 - **Unit Tests** (`test/modbus.test.ts`) - Core protocol functionality, CRC/LRC calculations, frame building
-- **Fuzzing Tests** (`test/modbus-fuzzing.test.ts`) - Property-based testing with random frame generation 
-- **Timing Tests** (`test/modbus-timing.test.ts`) - Timeout handling, race conditions, overlapping requests
+- **Fuzzing Tests** (`test/modbus-fuzzing.test.ts`) - Property-based testing with random frame generation
+- **Timing Tests** (`test/modbus-timing.test.ts`) - Abort handling (replaces legacy internal timeout), race conditions, overlapping requests
 - **UI Tests** (`test/ui-parsing.test.ts`) - Input validation and parsing logic
 
 ### Coverage Requirements
 
 - **Statements**: 90% (currently 93.64%)
-- **Branches**: 85% (currently 87.96%) 
+- **Branches**: 85% (currently 87.96%)
 - **Lines**: 90% (currently 93.64%)
 - **Functions**: 90% (currently 100%)
 
@@ -409,13 +518,13 @@ pnpm test test/modbus.test.ts
 ### Test Features
 
 - **Property-based testing** with fast-check for robust frame validation
-- **Fake timers** for deterministic timeout testing  
+- **Fake timers** for deterministic timeout testing
 - **Frame fuzzing** with up to 200 random corrupted frames per test
 - **Buffer boundary testing** with frame chunking scenarios
 - **ASCII and RTU protocol coverage** including error paths
 - **Race condition prevention** testing for concurrent requests
 
-The test suite validates that the Modbus implementation handles malformed frames gracefully without crashes and properly manages request timeouts and overlapping requests.
+The test suite validates the pure function + transport integration: malformed frames, resynchronisation, abort-driven cancellations and overlapping request prevention in higher layers.
 
 The project includes a comprehensive CI pipeline that:
 - Tests across Node.js versions 18, 20, and 22

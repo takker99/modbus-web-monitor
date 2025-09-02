@@ -1,3 +1,4 @@
+import { isOk } from "option-t/plain_result";
 import { describe, expect, it } from "vitest";
 import { calculateCRC16 } from "../src/crc.ts";
 import {
@@ -7,7 +8,6 @@ import {
   validateRTUFrame,
 } from "../src/frameParser.ts";
 import { MockTransport } from "../src/transport/mock-transport.ts";
-import { TransportRegistry } from "../src/transport/transport.ts";
 
 // Utility to append CRC to a payload (without CRC)
 function withCRC(bytes: number[]): number[] {
@@ -25,44 +25,31 @@ describe("MockTransport uncovered branches", () => {
 
   it("disconnect no-op when already disconnected", async () => {
     const mt = new MockTransport({ type: "mock" });
-    await mt.disconnect(); // no throw
+    await mt.disconnect();
     expect(mt.connected).toBe(false);
   });
 
-  it("send before connect rejects", async () => {
+  it("postMessage before connect throws", () => {
     const mt = new MockTransport({ type: "mock" });
-    await expect(mt.send(new Uint8Array([1, 2, 3]))).rejects.toThrow(
+    expect(() => mt.postMessage(new Uint8Array([1, 2, 3]))).toThrow(
       /not connected/,
     );
   });
 
-  it("autoResponses path emits data", async () => {
+  it("autoResponses path emits message event", async () => {
     const mt = new MockTransport({ type: "mock" });
     const req = new Uint8Array([0x01, 0x03, 0x00]);
     const res = new Uint8Array([0x11, 0x22]);
     mt.setAutoResponse(req, res);
     const received: Uint8Array[] = [];
-    mt.on("data", (d) => received.push(d));
+    mt.addEventListener("message", (e) =>
+      received.push((e as CustomEvent<Uint8Array>).detail),
+    );
     await mt.connect();
-    await mt.send(req);
+    mt.postMessage(req);
     await new Promise((r) => setTimeout(r, 5));
     expect(received.length).toBe(1);
     expect(Array.from(received[0])).toEqual([0x11, 0x22]);
-  });
-});
-
-describe("TransportRegistry invalid type branches", () => {
-  it("mock factory rejects wrong type", () => {
-    // 'mock' 登録ファクトリに 'serial' を与えてミスマッチエラーを誘発
-    expect(() =>
-      TransportRegistry.create({
-        baudRate: 9600,
-        dataBits: 8,
-        parity: "none",
-        stopBits: 1,
-        type: "serial",
-      }),
-    ).toThrow();
   });
 });
 
@@ -70,18 +57,18 @@ describe("frameParser extra negative branches", () => {
   it("parseRTUFrame unknown function code", () => {
     const buf = withCRC([1, 99, 0x00, 0x00]); // will be length 6 but function 99 triggers unknown
     const result = parseRTUFrame(buf);
-    expect(result.success).toBe(false);
+    expect(isOk(result)).toBe(false);
   });
 
   it("validateRTUFrame invalid function code", () => {
     const buf = withCRC([1, 99, 0, 0]);
     const res = validateRTUFrame(buf);
-    expect(res.isValid).toBe(false);
+    expect(isOk(res)).toBe(false);
   });
 
   it("validateASCIIFrame invalid format", () => {
     const res = validateASCIIFrame("XX0102");
-    expect(res.isValid).toBe(false);
+    expect(isOk(res)).toBe(false);
   });
 
   it("getExpectedResponseLength exception", () => {

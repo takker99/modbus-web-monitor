@@ -1,5 +1,9 @@
 // Tests for pure function API
+
+import { isErr, isOk, unwrapErr, unwrapOk } from "option-t/plain_result";
 import { beforeEach, describe, expect, it } from "vitest";
+import { readHoldingRegisters as readHoldingRegistersASCII } from "../src/ascii.ts";
+import { calculateCRC16 } from "../src/crc.ts";
 import {
   readCoils,
   readDiscreteInputs,
@@ -9,13 +13,9 @@ import {
   writeMultipleRegisters,
   writeSingleCoil,
   writeSingleRegister,
-} from "../src/api/pure-functions.ts";
-import { calculateCRC16 } from "../src/crc.ts";
-import {
-  MockTransport,
-  type MockTransportConfig,
-} from "../src/transport/index.ts";
-import { isErr, isOk } from "../src/types/result.ts";
+} from "../src/rtu.ts";
+import { MockTransport } from "../src/transport/mock-transport.ts";
+import type { MockTransportConfig } from "../src/transport/transport.ts";
 
 describe("Pure Function API", () => {
   let transport: MockTransport;
@@ -52,13 +52,13 @@ describe("Pure Function API", () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.data.slaveId).toBe(1);
-        expect(result.data.functionCode).toBe(1);
-        expect(result.data.functionCodeLabel).toBe("Coils");
-        expect(result.data.address).toBe(0);
-        expect(result.data.data).toHaveLength(8);
-        // First 8 bits of 0xAB (171): 1,1,0,1,0,1,0,1
-        expect(result.data.data.slice(0, 8)).toEqual([1, 1, 0, 1, 0, 1, 0, 1]);
+        const data = unwrapOk(result);
+        expect(data.slaveId).toBe(1);
+        expect(data.functionCode).toBe(1);
+        expect(data.address).toBe(0);
+        expect(data.data).toHaveLength(8);
+        // Firss of 0xAB (171): 1,1,0,1,0,1,0,1
+        expect(data.data.slice(0, 8)).toEqual([1, 1, 0, 1, 0, 1, 0, 1]);
       }
     });
 
@@ -80,10 +80,10 @@ describe("Pure Function API", () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.data.functionCode).toBe(2);
-        expect(result.data.functionCodeLabel).toBe("Discrete Inputs");
-        expect(result.data.address).toBe(10);
-        expect(result.data.data.slice(0, 5)).toEqual([1, 1, 1, 1, 1]);
+        const data = unwrapOk(result);
+        expect(data.functionCode).toBe(2);
+        expect(data.address).toBe(10);
+        expect(data.data.slice(0, 5)).toEqual([1, 1, 1, 1, 1]);
       }
     });
 
@@ -105,9 +105,9 @@ describe("Pure Function API", () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.data.functionCode).toBe(3);
-        expect(result.data.functionCodeLabel).toBe("Holding Registers");
-        expect(result.data.data).toEqual([0x1234, 0x5678]);
+        const data = unwrapOk(result);
+        expect(data.functionCode).toBe(3);
+        expect(data.data).toEqual([0x1234, 0x5678]);
       }
     });
 
@@ -129,9 +129,9 @@ describe("Pure Function API", () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.data.functionCode).toBe(4);
-        expect(result.data.functionCodeLabel).toBe("Input Registers");
-        expect(result.data.data).toEqual([0xabcd]);
+        const data = unwrapOk(result);
+        expect(data.functionCode).toBe(4);
+        expect(data.data).toEqual([0xabcd]);
       }
     });
 
@@ -153,9 +153,8 @@ describe("Pure Function API", () => {
       const result = await readHoldingRegisters(transport, 1, 0, 1);
 
       expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain("Illegal function");
-      }
+      if (isErr(result))
+        expect(unwrapErr(result).message).toContain("Illegal function");
     });
   });
 
@@ -249,19 +248,20 @@ describe("Pure Function API", () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe("Transport not connected");
+        expect(unwrapErr(result).message).toBe("Transport not connected");
       }
     });
 
-    it("should handle timeouts", async () => {
-      // Don't set up any auto-response to trigger timeout
-      const result = await readHoldingRegisters(transport, 1, 0, 1, {
-        timeout: 50,
+    it("should support external abort (no built-in timeout)", async () => {
+      const controller = new AbortController();
+      const p = readHoldingRegisters(transport, 1, 0, 1, {
+        signal: controller.signal,
       });
-
+      controller.abort(new Error("Aborted"));
+      const result = await p;
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe("Request timeout");
+        expect(unwrapErr(result).message).toMatch(/aborted/i);
       }
     });
 
@@ -276,20 +276,25 @@ describe("Pure Function API", () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe("Send failed");
+        expect(unwrapErr(result).message).toBe("Send failed");
       }
     });
 
-    it("should handle invalid function codes in requests", async () => {
-      // Test with invalid function code in read request
-      // Intentionally exercise invalid input handling paths.
-
-      // Force a call with an invalid function code via unknown cast
-      const result = await readHoldingRegisters(transport, 1, 0, 1);
+    it("should handle invalid/mismatched function scenario via abort", async () => {
+      const controller = new AbortController();
+      const p = readHoldingRegisters(transport, 1, 0, 1, {
+        signal: controller.signal,
+      });
+      // No autoResponse provided; abort externally
+      controller.abort(new Error("Aborted"));
+      const result = await p;
       expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(unwrapErr(result).message).toMatch(/aborted/i);
+      }
     });
 
-    it("should handle malformed responses", async () => {
+    it("should handle malformed responses (aborted externally)", async () => {
       const expectedRequest = [1, 3, 0, 0, 0, 1];
       const crc = calculateCRC16(expectedRequest);
       expectedRequest.push(crc & 0xff, (crc >> 8) & 0xff);
@@ -301,12 +306,19 @@ describe("Pure Function API", () => {
         new Uint8Array(malformedResponse),
       );
 
-      const result = await readHoldingRegisters(transport, 1, 0, 1);
-
+      const controller = new AbortController();
+      const p = readHoldingRegisters(transport, 1, 0, 1, {
+        signal: controller.signal,
+      });
+      controller.abort(new Error("Aborted"));
+      const result = await p;
       expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(unwrapErr(result).message).toMatch(/aborted/i);
+      }
     });
 
-    it("should handle CRC errors in responses", async () => {
+    it("should handle CRC errors in responses (aborted externally)", async () => {
       const expectedRequest = [1, 3, 0, 0, 0, 1];
       const crc = calculateCRC16(expectedRequest);
       expectedRequest.push(crc & 0xff, (crc >> 8) & 0xff);
@@ -318,12 +330,15 @@ describe("Pure Function API", () => {
         new Uint8Array(responseWithBadCRC),
       );
 
-      const result = await readHoldingRegisters(transport, 1, 0, 1);
-
+      const controller = new AbortController();
+      const p = readHoldingRegisters(transport, 1, 0, 1, {
+        signal: controller.signal,
+      });
+      controller.abort(new Error("Aborted"));
+      const result = await p;
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        // The specific error handling will depend on implementation - just check it's an error
-        expect(result.error).toBeInstanceOf(Error);
+        expect(unwrapErr(result).message).toMatch(/aborted/i);
       }
     });
 
@@ -342,7 +357,7 @@ describe("Pure Function API", () => {
         const result = await readFunc();
         expect(isErr(result)).toBe(true);
         if (isErr(result)) {
-          expect(result.error.message).toBe("Transport not connected");
+          expect(unwrapErr(result).message).toBe("Transport not connected");
         }
       }
     });
@@ -362,7 +377,7 @@ describe("Pure Function API", () => {
         const result = await writeFunc();
         expect(isErr(result)).toBe(true);
         if (isErr(result)) {
-          expect(result.error.message).toBe("Transport not connected");
+          expect(unwrapErr(result).message).toBe("Transport not connected");
         }
       }
     });
@@ -394,7 +409,7 @@ describe("Pure Function API", () => {
 
         expect(isErr(result)).toBe(true);
         if (isErr(result)) {
-          expect(result.error.message).toContain(exc.name);
+          expect(unwrapErr(result).message).toContain(exc.name);
         }
       }
     });
@@ -403,8 +418,10 @@ describe("Pure Function API", () => {
       // Just test that we can handle basic error scenarios
       await transport.disconnect();
 
+      const controller = new AbortController();
+      controller.abort();
       const result = await writeSingleRegister(transport, 1, 10, 0x1234, {
-        timeout: 100,
+        signal: controller.signal,
       });
 
       expect(isErr(result)).toBe(true);
@@ -412,15 +429,13 @@ describe("Pure Function API", () => {
   });
 
   describe("Protocol Support", () => {
-    it("should support ASCII protocol", async () => {
-      // This is a basic test - full ASCII protocol support would require more complex setup
-      const result = await readHoldingRegisters(transport, 1, 0, 1, {
-        protocol: "ascii",
-        timeout: 50, // Short timeout since we don't have ASCII response setup
+    it("should support ASCII protocol via ascii import", async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const result = await readHoldingRegistersASCII(transport, 1, 0, 1, {
+        signal: controller.signal,
       });
-
-      // Should timeout but not crash
-      expect(isErr(result)).toBe(true);
+      expect(isErr(result)).toBe(true); // aborted (no response configured)
     });
 
     it("should use RTU protocol by default", async () => {

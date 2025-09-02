@@ -1,23 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ModbusExceptionError } from "../src/errors.ts";
-import { buildWriteRequest } from "../src/frameBuilder.ts";
-import type { ModbusWriteConfig } from "../src/modbus.ts";
-import { SerialManager } from "../src/serial.ts";
+import { toWritePDU } from "../src/frameBuilder.ts";
+import type { WriteRequest } from "../src/modbus.ts";
 
 // Helper to build a minimal write config
-function writeCfg(overrides: Partial<ModbusWriteConfig>): ModbusWriteConfig {
+function writeCfg(overrides: Partial<WriteRequest>): WriteRequest {
   return {
     address: 0x0000,
     functionCode: 5,
     slaveId: 1,
     value: 1,
     ...overrides,
-  } as ModbusWriteConfig;
+  };
 }
 
 describe("errors.ts additional branches", () => {
   it("ModbusExceptionError unknown exception code uses fallback message", () => {
-    const err = new ModbusExceptionError(0x7f); // not in map
+    // biome-ignore lint/suspicious/noExplicitAny: For test case
+    const err = new ModbusExceptionError(0x7f as any); // not in map
     expect(err.message).toMatch(/Unknown exception 127/);
   });
 });
@@ -25,113 +25,43 @@ describe("errors.ts additional branches", () => {
 describe("frameBuilder write error branches", () => {
   it("FC15 requires array", () => {
     const cfg = writeCfg({ functionCode: 15, value: 1 });
-    expect(() => buildWriteRequest(cfg)).toThrow(/FC15 requires value/);
+    // biome-ignore lint/suspicious/noExplicitAny: intentional for invalid input test
+    expect(() => toWritePDU(cfg as any)).toThrow(/FC15 requires value/);
   });
 
   it("FC16 requires array", () => {
     const cfg = writeCfg({ address: 0x10, functionCode: 16, value: 1 });
-    expect(() => buildWriteRequest(cfg)).toThrow(/FC16 requires value/);
+    // biome-ignore lint/suspicious/noExplicitAny: intentional for invalid input test
+    expect(() => toWritePDU(cfg as any)).toThrow(/FC16 requires value/);
   });
 
   it("unsupported function code throws", () => {
     const cfg = writeCfg({ functionCode: 99 as unknown as 5 });
-    expect(() => buildWriteRequest(cfg)).toThrow(/Unsupported function code/);
+    // biome-ignore lint/suspicious/noExplicitAny: intentional for invalid input test
+    expect(() => toWritePDU(cfg as any)).toThrow(/Unsupported function code/);
   });
 });
 
-class FakeSerialPort {
-  readable: ReadableStream<Uint8Array> | null = null;
-  writable: WritableStream<Uint8Array> | null = null;
-  async open(): Promise<void> {}
-  async close(): Promise<void> {}
-}
+import { isOk } from "option-t/plain_result";
+import { readHoldingRegisters } from "../src/ascii.ts";
+import { readHoldingRegisters as readHoldingRegistersRTU } from "../src/rtu.ts";
+// Extra abort pre-check coverage for pure function APIs
+import { MockTransport } from "../src/transport/mock-transport.ts";
 
-type RequestPortFn = () => Promise<unknown>;
-function setNavigatorSerial(requestPortImpl: RequestPortFn) {
-  (
-    globalThis as unknown as {
-      navigator: { serial: { requestPort: RequestPortFn } };
-    }
-  ).navigator = {
-    serial: { requestPort: requestPortImpl },
-  };
-}
-
-describe("SerialManager negative paths", () => {
-  it("connect without selecting port", async () => {
-    const sm = new SerialManager();
-    await expect(
-      sm.connect({ baudRate: 9600, dataBits: 8, parity: "none", stopBits: 1 }),
-    ).rejects.toThrow(/No port selected/);
-  });
-
-  it("send without writer", async () => {
-    const sm = new SerialManager();
-    await expect(sm.send(new Uint8Array([1, 2, 3]))).rejects.toThrow(
-      /Serial port not open/,
-    );
-  });
-
-  it("reconnect without port selected", async () => {
-    const sm = new SerialManager();
-    await expect(
-      sm.reconnect({
-        baudRate: 9600,
-        dataBits: 8,
-        parity: "none",
-        stopBits: 1,
-      }),
-    ).rejects.toThrow(/No port available/);
-  });
-
-  it("selectPort failure propagates", async () => {
-    const sm = new SerialManager();
-    const requestPort = vi.fn().mockRejectedValue(new Error("denied"));
-    setNavigatorSerial(requestPort);
-    await expect(sm.selectPort()).rejects.toThrow(/Failed to select port/);
-    expect(requestPort).toHaveBeenCalled();
-  });
-
-  it("EventEmitter off removes listener", () => {
-    const sm = new SerialManager();
-    const fn = vi.fn();
-    sm.on("connected", fn);
-    sm.off("connected", fn);
-    (sm as unknown as { emit: (e: string) => void }).emit("connected");
-    expect(fn).not.toHaveBeenCalled();
-  });
-
-  it("connect already connected throws", async () => {
-    const sm = new SerialManager();
-    const fake = new FakeSerialPort() as unknown as SerialPort & {
-      readable: ReadableStream<Uint8Array> | null;
-      writable: WritableStream<Uint8Array> | null;
-    };
-    (fake as { readable: ReadableStream<Uint8Array> | null }).readable =
-      new ReadableStream<Uint8Array>({
-        start(c) {
-          c.close();
-        },
-      });
-    (fake as { writable: WritableStream<Uint8Array> | null }).writable =
-      new WritableStream<Uint8Array>({
-        write() {
-          /* no-op */
-        },
-      });
-    const rp = vi.fn().mockResolvedValue(fake);
-    setNavigatorSerial(rp);
-    await sm.selectPort();
-    await sm.connect({
-      baudRate: 9600,
-      dataBits: 8,
-      parity: "none",
-      stopBits: 1,
+/* eslint-disable @typescript-eslint/no-explicit-any */
+describe("Abort pre-check coverage", () => {
+  it("aborted signal before send returns aborted error (rtu & ascii)", async () => {
+    const transport = new MockTransport({ name: "extra", type: "mock" });
+    await transport.connect();
+    const c = new AbortController();
+    c.abort(new Error("Aborted"));
+    const rtuResult = await readHoldingRegistersRTU(transport, 1, 0, 1, {
+      signal: c.signal,
     });
-    // Force internal state for guard branch (simulate already connected)
-    (sm as unknown as { isConnected: boolean }).isConnected = true;
-    await expect(
-      sm.connect({ baudRate: 9600, dataBits: 8, parity: "none", stopBits: 1 }),
-    ).rejects.toThrow(/Already connected/);
+    const asciiResult = await readHoldingRegisters(transport, 1, 0, 1, {
+      signal: c.signal,
+    });
+    expect(isOk(rtuResult)).toBe(false);
+    expect(isOk(asciiResult)).toBe(false);
   });
 });

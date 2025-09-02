@@ -4,97 +4,65 @@
  * Note: This is a placeholder implementation since Web browsers don't
  * support raw TCP sockets. In Node.js this would use `net.Socket`.
  */
-import { EventEmitter } from "../serial.ts";
-import type {
-  IModbusTransport,
-  TcpTransportConfig,
-  TransportEvents,
-  TransportState,
-} from "./transport.ts";
+import type { IModbusTransport, TcpTransportConfig } from "./transport.ts";
 
-export class TcpTransport
-  extends EventEmitter<TransportEvents>
-  implements IModbusTransport
-{
-  private _state: TransportState = "disconnected";
+/** Placeholder implementation for Modbus TCP (not usable in browsers). */
+export class TcpTransport implements IModbusTransport {
+  private _connected = false;
   private socket: WebSocket | null = null;
+  private readonly target = new EventTarget();
 
-  constructor(public readonly config: TcpTransportConfig) {
-    super();
-  }
-
-  get state(): TransportState {
-    return this._state;
-  }
+  constructor(public readonly config: TcpTransportConfig) {}
 
   get connected(): boolean {
-    return this._state === "connected";
+    return this._connected;
   }
 
   /**
    * Establish a TCP (or placeholder) connection. Throws on browsers.
    */
+  /** Attempt to establish a TCP connection (always fails in browsers). */
   async connect(): Promise<void> {
-    if (this._state === "connected") {
-      return;
-    }
-
-    this.setState("connecting");
-
-    try {
-      // Browsers cannot create raw TCP sockets; instruct users to use a
-      // WebSocket bridge for Modbus TCP instead.
-      throw new Error(
-        "TCP transport not supported in browser environment. Use WebSocket transport with a Modbus TCP bridge server.",
-      );
-    } catch (error) {
-      this.setState("error");
-      throw error;
-    }
+    // Always unsupported in browser environment – keep API parity.
+    if (this._connected) return;
+    throw new Error(
+      "TCP transport not supported in browser environment. Use a bridge (e.g. WebSocket proxy).",
+    );
   }
 
-  async disconnect(): Promise<void> {
-    if (this._state === "disconnected") {
-      return;
+  /** Close the (placeholder) socket if present. */
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (!this._connected) return;
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
     }
-
-    try {
-      if (this.socket) {
-        this.socket.close();
-        this.socket = null;
-      }
-      this.setState("disconnected");
-      this.emit("disconnect");
-    } catch (error) {
-      this.setState("error");
-      throw error;
-    }
+    this._connected = false;
   }
 
-  async send(data: Uint8Array): Promise<void> {
-    if (this._state !== "connected") {
-      throw new Error("Transport not connected");
-    }
+  /** Close the (placeholder) socket if present. */
+  disconnect = this[Symbol.asyncDispose].bind(this);
 
-    if (!this.socket) {
-      throw new Error("No socket connection");
-    }
-
-    try {
-      // For Modbus TCP, we would need to add the MBAP header
-      // (Transaction ID, Protocol ID, Length, Unit ID)
-      // This is a simplified implementation
-      this.socket.send(data);
-    } catch (error) {
-      this.emit("error", error as Error);
-      throw error;
-    }
+  /** Send raw bytes over the (unsupported) TCP channel. */
+  postMessage(_data: Uint8Array): void {
+    throw new Error("TCP transport not connected");
   }
 
-  private setState(newState: TransportState): void {
-    if (this._state !== newState) {
-      this._state = newState;
-      this.emit("stateChange", newState);
-    }
+  addEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
+    options?: AddEventListenerOptions,
+  ): void {
+    this.target.addEventListener(type, listener, options);
+  }
+  removeEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
+    options?: EventListenerOptions,
+  ): void {
+    this.target.removeEventListener(type, listener, options);
+  }
+  dispatchEvent(event: Event): boolean {
+    return this.target.dispatchEvent(event);
   }
 }

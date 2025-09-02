@@ -10,12 +10,16 @@
   },
   "chat.tools.terminal.autoApprove": {
     "cd": true,
-    "pnpm run check": true,
-    "pnpm run fix": true,
+    "grep": true,
+    "head": true,
+    "ls": true,
     "pnpm check": true,
     "pnpm fix": true,
+    "pnpm run check": true,
+    "pnpm run fix": true,
+    "pnpm test": true,
     "pnpm vitest": true,
-    "pnpm test": true
+    "tail": true
   },
   "editor.codeActionsOnSave": {
     "source.addMissingImports.ts": "always",
@@ -25,6 +29,5 @@
     "source.organizeLinkDefinitions": "always",
     "source.sort.json": "always",
     "source.sortImports": "always"
-  },
-  "typescript.tsdk": "node_modules/typescript/lib"
+  }
 }

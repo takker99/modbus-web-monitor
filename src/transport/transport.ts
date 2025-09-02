@@ -1,111 +1,86 @@
-// Transport abstraction for Modbus communication
-// Provides a unified interface for different transport types (Serial, TCP, WebSocket)
-
-import type { EventEmitter } from "../serial.ts";
+/**
+ * Transport abstraction for Modbus communication (MessagePort-like interface).
+ *
+ * This layer provides a small, implementation‑agnostic contract used by the
+ * RTU / ASCII pure function APIs. Implementations deliberately mirror a
+ * subset of the browser `MessagePort`/`WebSocket` style so they are easy to
+ * reason about and can be swapped (Serial / Mock / future WebSocket, etc.).
+ *
+ * Design notes:
+ * - Uses DOM `addEventListener` semantics instead of a custom EventEmitter
+ * - Narrow surface: `connect()`, `disconnect()`, `postMessage()`
+ * - All inbound data is delivered as `Uint8Array` via `message` events.
+ * - Connection lifecycle is intentionally opaque aside from `connected`.
+ */
 
 // Transport configuration for different types
-export interface SerialTransportConfig {
+/** Configuration for a Web Serial based transport. */
+export interface SerialTransportConfig extends SerialOptions {
   type: "serial";
-  baudRate: number;
-  dataBits: 7 | 8;
-  parity: "none" | "even" | "odd";
-  stopBits: 1 | 2;
 }
 
+/** Configuration for a (placeholder) TCP transport. */
 export interface TcpTransportConfig {
   type: "tcp";
   host: string;
   port: number;
-  timeout?: number;
+  // timeout は API から排除 (利用者が AbortSignal を用意)
 }
 
+/** Configuration for a (future) WebSocket transport. */
 export interface WebSocketTransportConfig {
   type: "websocket";
   url: string;
   protocols?: string[];
 }
 
+/** Configuration for the in‑memory / test oriented mock transport. */
 export interface MockTransportConfig {
   type: "mock";
   name?: string;
 }
 
+/** Discriminated union of all supported transport configuration objects. */
 export type TransportConfig =
   | SerialTransportConfig
   | TcpTransportConfig
   | WebSocketTransportConfig
   | MockTransportConfig;
 
-// Transport connection state
-export type TransportState =
-  | "disconnected"
-  | "connecting"
-  | "connected"
-  | "error";
+// (Legacy TransportState removed – minimal API uses boolean `connected` only.)
 
-// Transport event types
-export interface TransportEvents extends Record<string, unknown[]> {
-  stateChange: [TransportState];
-  data: [Uint8Array];
-  error: [Error];
-  connect: [];
-  disconnect: [];
+// MessagePort-like events: now minimal: 'message', 'error'
+/** Event emitted when raw bytes are received from the underlying link. */
+export interface TransportMessageEvent extends CustomEvent<Uint8Array> {}
+/** Event emitted on transport level errors (I/O, disconnection, etc.). */
+export interface TransportErrorEvent extends CustomEvent<Error> {
+  /** Shortcut reference to the error object (mirrors WebSocket semantics). */
+  readonly error: Error;
 }
+/** Strongly typed event map used by transports. */
+export type TransportEventMap = {
+  /** Fired for each received binary message (raw Modbus frame bytes). */
+  message: TransportMessageEvent;
+  /** Fired on I/O errors; the error is available via `detail` and `.error`. */
+  error: TransportErrorEvent;
+};
 
-// Base transport interface that all transport implementations must follow
-export interface IModbusTransport extends EventEmitter<TransportEvents> {
+/**
+ * Minimal contract implemented by every transport.
+ *
+ * Implementations should be side‑effect free except for I/O; no internal
+ * buffering guarantees are required beyond emitting raw frames as they are
+ * observed on the underlying medium.
+ */
+export interface IModbusTransport extends AsyncDisposable, EventTarget {
+  /** User supplied configuration discriminator for the transport. */
   readonly config: TransportConfig;
-  readonly state: TransportState;
+  /** Convenience boolean indicates established connection. */
   readonly connected: boolean;
 
-  // Core transport operations
+  /** Establish a connection / open underlying resources. */
   connect(): Promise<void>;
-  disconnect(): Promise<void>;
-  send(data: Uint8Array): Promise<void>;
 
-  // Optional operations for transport-specific functionality
-  reconnect?(): Promise<void>;
-
-  // Event emitter methods (for compatibility)
-  on<K extends keyof TransportEvents>(
-    event: K,
-    listener: (...args: TransportEvents[K]) => void,
-  ): void;
-  off<K extends keyof TransportEvents>(
-    event: K,
-    listener: (...args: TransportEvents[K]) => void,
-  ): void;
-  emit<K extends keyof TransportEvents>(
-    event: K,
-    ...args: TransportEvents[K]
-  ): void;
+  /** Send raw bytes. Implementations may throw if not connected. */
+  postMessage(data: Uint8Array): void;
 }
-
-// Transport factory function type
-export type TransportFactory<T extends TransportConfig = TransportConfig> = (
-  config: T,
-) => IModbusTransport;
-
-// Registry for transport factories
-// Registry implemented as module-scoped map + exported helper functions.
-const factories = new Map<string, TransportFactory>();
-
-export const TransportRegistry = {
-  create(config: TransportConfig): IModbusTransport {
-    const factory = factories.get(config.type);
-    if (!factory) {
-      throw new Error(`Unknown transport type: ${config.type}`);
-    }
-    return factory(config);
-  },
-
-  getRegisteredTypes(): string[] {
-    return Array.from(factories.keys());
-  },
-  register<T extends TransportConfig>(
-    type: T["type"],
-    factory: TransportFactory<T>,
-  ) {
-    factories.set(type, factory as TransportFactory);
-  },
-} as const;

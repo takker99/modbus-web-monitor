@@ -1,3 +1,4 @@
+import { isErr, isOk, unwrapErr, unwrapOk } from "option-t/plain_result";
 import { describe, expect, it } from "vitest";
 import { calculateCRC16 } from "../src/crc.ts";
 import {
@@ -9,7 +10,6 @@ import {
   checkFrameCRC,
   findFrameResyncPosition,
   isPlausibleFrameStart,
-  type ParsedFrame,
   parseASCIIFrame,
   parseBitData,
   parseRegisterData,
@@ -71,29 +71,29 @@ describe("frameParser utilities", () => {
 describe("parseRTUFrame", () => {
   it("errors on too short frame", () => {
     const r = parseRTUFrame([1, 3, 0]);
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error).toBeInstanceOf(ModbusFrameError);
+    expect(isOk(r)).toBe(false);
+    if (isErr(r)) expect(unwrapErr(r)).toBeInstanceOf(ModbusFrameError);
   });
 
   it("errors on incomplete header for variable length read", () => {
     const r = parseRTUFrame([1, 3]);
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error).toBeInstanceOf(ModbusFrameError);
+    expect(isOk(r)).toBe(false);
+    if (isErr(r)) expect(unwrapErr(r)).toBeInstanceOf(ModbusFrameError);
   });
 
   it("errors on unknown function code", () => {
     const frame = [1, 99, 0, 0];
     const r = parseRTUFrame(frame);
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error).toBeInstanceOf(ModbusFrameError);
+    expect(isOk(r)).toBe(false);
+    if (isErr(r)) expect(unwrapErr(r)).toBeInstanceOf(ModbusFrameError);
   });
 
   it("errors on incomplete frame", () => {
     // FC3 expects 3 + byteCount + 2. Give less.
     const frame = [1, 3, 4, 0x11, 0x22];
     const r = parseRTUFrame(frame);
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error).toBeInstanceOf(ModbusFrameError);
+    expect(isOk(r)).toBe(false);
+    if (isErr(r)) expect(unwrapErr(r)).toBeInstanceOf(ModbusFrameError);
   });
 
   it("detects CRC error", () => {
@@ -102,26 +102,26 @@ describe("parseRTUFrame", () => {
     const bad = [...good];
     bad[3] ^= 0xff;
     const r = parseRTUFrame(bad);
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error).toBeInstanceOf(ModbusCRCError);
+    expect(isOk(r)).toBe(false);
+    if (isErr(r)) expect(unwrapErr(r)).toBeInstanceOf(ModbusCRCError);
   });
 
   it("parses normal read response", () => {
     const frame = buildRTUFrame(1, 3, [2, 0x00, 0x05]);
     const r = parseRTUFrame(frame);
-    expect(r.success).toBe(true);
+    expect(isOk(r)).toBe(true);
     // For FC3 the parser returns the raw data bytes after byte count => [0x00,0x05]
-    if (!r.success) throw new Error("expected success");
-    expect(r.data.data).toEqual([0x00, 0x05]);
+    if (isErr(r)) throw new Error("expected success");
+    expect(unwrapOk(r).data).toEqual([0x00, 0x05]);
   });
 
   it("parses write single register echo", () => {
     // FC6 echo: slave,6,addr hi,addr lo,val hi,val lo,crc lo,crc hi
     const frame = buildRTUFrame(1, 6, [0x00, 0x10, 0x12, 0x34]);
     const r = parseRTUFrame(frame);
-    expect(r.success).toBe(true);
-    if (!r.success) throw new Error("expected success");
-    const data = r.data.data;
+    expect(isOk(r)).toBe(true);
+    if (isErr(r)) throw new Error("expected success");
+    const data = unwrapOk(r).data;
     expect(data).toEqual([0x00, 0x10, 0x12, 0x34]);
   });
 
@@ -133,9 +133,9 @@ describe("parseRTUFrame", () => {
       hi = (crc >> 8) & 0xff;
     const frame = [...base, lo, hi];
     const r = parseRTUFrame(frame);
-    expect(r.success).toBe(true);
-    if (!r.success) throw new Error("expected success");
-    const pf = r.data as ParsedFrame;
+    expect(isOk(r)).toBe(true);
+    if (isErr(r)) throw new Error("expected success");
+    const pf = unwrapOk(r);
     expect(pf.isException).toBe(true);
     expect(pf.exceptionCode).toBe(2);
     expect(pf.functionCode).toBe(3); // masked
@@ -145,33 +145,33 @@ describe("parseRTUFrame", () => {
 describe("parseASCIIFrame", () => {
   it("rejects invalid start", () => {
     const r = parseASCIIFrame("abc");
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error).toBeInstanceOf(ModbusFrameError);
+    expect(isOk(r)).toBe(false);
+    if (isErr(r)) expect(unwrapErr(r)).toBeInstanceOf(ModbusFrameError);
   });
 
   it("rejects odd length", () => {
     const r = parseASCIIFrame(":01030");
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error).toBeInstanceOf(ModbusFrameError);
+    expect(isOk(r)).toBe(false);
+    if (isErr(r)) expect(unwrapErr(r)).toBeInstanceOf(ModbusFrameError);
   });
 
   it("rejects invalid hex pair", () => {
     const r = parseASCIIFrame(":01GG");
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error).toBeInstanceOf(ModbusFrameError);
+    expect(isOk(r)).toBe(false);
+    if (isErr(r)) expect(unwrapErr(r)).toBeInstanceOf(ModbusFrameError);
   });
 
   it("rejects too short", () => {
     const r = parseASCIIFrame(":01");
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error).toBeInstanceOf(ModbusFrameError);
+    expect(isOk(r)).toBe(false);
+    if (isErr(r)) expect(unwrapErr(r)).toBeInstanceOf(ModbusFrameError);
   });
 
   it("rejects LRC mismatch", () => {
     const frame = ":0103FF"; // LRC wrong intentionally
     const r = parseASCIIFrame(frame);
-    expect(r.success).toBe(false);
-    if (!r.success) expect(r.error).toBeInstanceOf(ModbusLRCError);
+    expect(isOk(r)).toBe(false);
+    if (isErr(r)) expect(unwrapErr(r)).toBeInstanceOf(ModbusLRCError);
   });
 
   it("parses normal frame", () => {
@@ -179,9 +179,9 @@ describe("parseASCIIFrame", () => {
     const bytes = [1, 3, 2, 0x00, 0x10];
     const str = buildASCIIFrame(bytes);
     const r = parseASCIIFrame(str);
-    expect(r.success).toBe(true);
-    if (!r.success) throw new Error("expected success");
-    const pf = r.data as ParsedFrame;
+    expect(isOk(r)).toBe(true);
+    if (isErr(r)) throw new Error("expected success");
+    const pf = unwrapOk(r);
     // Expect only register bytes after byte count
     expect(pf.data).toEqual([0x00, 0x10]);
   });
@@ -190,9 +190,9 @@ describe("parseASCIIFrame", () => {
     const bytes = [1, 0x83, 2];
     const str = buildASCIIFrame(bytes);
     const r = parseASCIIFrame(str);
-    expect(r.success).toBe(true);
-    if (!r.success) throw new Error("expected success");
-    const pf = r.data as ParsedFrame;
+    expect(isOk(r)).toBe(true);
+    if (isErr(r)) throw new Error("expected success");
+    const pf = unwrapOk(r);
     expect(pf.isException).toBe(true);
     expect(pf.exceptionCode).toBe(2);
     expect(pf.functionCode).toBe(3);

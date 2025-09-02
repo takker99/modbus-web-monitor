@@ -1,143 +1,122 @@
 // Serial transport implementation using Web Serial API
 // Wraps the existing SerialManager to implement the IModbusTransport interface
 
-import { EventEmitter, type SerialConfig, SerialManager } from "../serial.ts";
-import type {
-  IModbusTransport,
-  SerialTransportConfig,
-  TransportEvents,
-  TransportState,
-} from "./transport.ts";
+import type { IModbusTransport, SerialTransportConfig } from "./transport.ts";
 
 /**
  * Serial transport implementation using Web Serial API.
  * Wraps the existing SerialManager to implement the IModbusTransport interface.
  */
-export class SerialTransport
-  extends EventEmitter<TransportEvents>
-  implements IModbusTransport
-{
-  private serialManager: SerialManager;
-  private _state: TransportState = "disconnected";
+/**
+ * Concrete transport backed by the Web Serial API.
+ *
+ * Responsibilities:
+ * - Port selection delegation to {@link SerialManager}
+ * - Propagating SerialManager events as transport events
+ * - Minimal state machine bridging imperative connect/disconnect lifecycle
+ */
+export class SerialTransport extends EventTarget implements IModbusTransport {
+  #port: SerialPort;
 
-  constructor(public readonly config: SerialTransportConfig) {
+  constructor(
+    public readonly config: SerialTransportConfig,
+    port: SerialPort,
+  ) {
     super();
-    this.serialManager = new SerialManager();
-    this.setupSerialManagerEvents();
+    this.#port = port;
   }
 
-  get state(): TransportState {
-    return this._state;
-  }
-
+  #connected = false;
   get connected(): boolean {
-    return this._state === "connected";
+    return this.#connected;
   }
 
+  #writer: WritableStreamDefaultWriter | null = null;
+  #readerClosed: Promise<void> = Promise.resolve();
+
+  /**
+   * Open (or reopen) the selected port with the provided serial configuration.
+   * On success starts background reading and exposes a writer.
+   */
   async connect(): Promise<void> {
-    if (this._state === "connected") {
+    if (this.#connected) return;
+    await this.#port.open(this.config);
+
+    console.log("SerialManager: port opened");
+
+    // Setup reader and writer
+    this.#readerClosed = this.#startReading();
+    this.#writer = this.#port.writable?.getWriter?.() ?? null;
+    this.#connected = true;
+  }
+
+  /** Close the underlying port if open. Safe to call repeatedly. */
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (!this.#connected) return;
+
+    await this.#port.readable?.cancel?.();
+    await this.#readerClosed;
+
+    // Close writer
+    await this.#writer?.close?.();
+    this.#writer?.releaseLock?.();
+    await this.#port.close();
+    this.#connected = false;
+  }
+
+  /** Close the underlying port if open. Safe to call repeatedly. */
+  disconnect = this[Symbol.asyncDispose].bind(this);
+
+  /**
+   * Send raw bytes to the serial device.
+   *
+   * Errors encountered during the async write are surfaced via an `error`
+   * event (fire-and-forget semantics by design for parity with MessagePort).
+   */
+  postMessage(data: Uint8Array): void {
+    if (!this.#connected) {
+      this.dispatchError(new Error("Transport not connected"));
       return;
     }
 
-    this.setState("connecting");
-
-    try {
-      // Select port if not already selected
-      await this.serialManager.selectPort();
-
-      // Convert transport config to serial config
-      const serialConfig: SerialConfig = {
-        baudRate: this.config.baudRate,
-        dataBits: this.config.dataBits,
-        parity: this.config.parity,
-        stopBits: this.config.stopBits,
-      };
-
-      await this.serialManager.connect(serialConfig);
-      // State will be set to "connected" by the event handler
-    } catch (error) {
-      this.setState("error");
-      throw error;
-    }
-  }
-
-  async disconnect(): Promise<void> {
-    if (this._state === "disconnected") {
+    if (!this.#writer) {
+      this.dispatchError(new Error("Serial port not open"));
       return;
     }
-
-    try {
-      await this.serialManager.disconnect();
-      // State will be set to "disconnected" by the event handler
-    } catch (error) {
-      this.setState("error");
-      throw error;
-    }
-  }
-
-  async send(data: Uint8Array): Promise<void> {
-    if (this._state !== "connected") {
-      throw new Error("Transport not connected");
-    }
-
-    try {
-      await this.serialManager.send(data);
-    } catch (error) {
-      this.emit("error", error as Error);
-      throw error;
-    }
-  }
-
-  async reconnect(): Promise<void> {
-    if (this._state === "connected") {
-      await this.disconnect();
-    }
-
-    const serialConfig: SerialConfig = {
-      baudRate: this.config.baudRate,
-      dataBits: this.config.dataBits,
-      parity: this.config.parity,
-      stopBits: this.config.stopBits,
-    };
-
-    try {
-      await this.serialManager.reconnect(serialConfig);
-    } catch (error) {
-      this.setState("error");
-      throw error;
-    }
-  }
-
-  private setupSerialManagerEvents(): void {
-    this.serialManager.on("connected", () => {
-      this.setState("connected");
-      this.emit("connect");
-    });
-
-    this.serialManager.on("disconnected", () => {
-      this.setState("disconnected");
-      this.emit("disconnect");
-    });
-
-    this.serialManager.on("portDisconnected", () => {
-      this.setState("disconnected");
-      this.emit("disconnect");
-    });
-
-    this.serialManager.on("error", (error: Error) => {
-      this.setState("error");
-      this.emit("error", error);
-    });
-
-    this.serialManager.on("data", (data: Uint8Array) => {
-      this.emit("data", data);
+    this.#writer.write(data).catch((error) => {
+      this.dispatchError(error as Error);
     });
   }
 
-  private setState(newState: TransportState): void {
-    if (this._state !== newState) {
-      this._state = newState;
-      this.emit("stateChange", newState);
+  private dispatchError(error: Error) {
+    const ev = Object.assign(
+      new CustomEvent<Error>("error", { detail: error }),
+      { error },
+    );
+    this.dispatchEvent(ev);
+  }
+
+  async #startReading(): Promise<void> {
+    while (this.#port.readable) {
+      const reader = this.#port.readable.getReader();
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          this.dispatchEvent(new CustomEvent("message", { detail: value }));
+        }
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        this.dispatchError(
+          new Error(`Data receive error: ${(error as Error).message}`, {
+            cause: error,
+          }),
+        );
+        // On stream error, stop outer loop to avoid tight retry on a permanently errored stream.
+        break;
+      } finally {
+        reader.releaseLock();
+      }
     }
   }
 }

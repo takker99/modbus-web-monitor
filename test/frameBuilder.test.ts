@@ -1,18 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { buildReadRequest, buildWriteRequest } from "../src/frameBuilder.ts";
-import type { ModbusReadConfig, ModbusWriteConfig } from "../src/modbus.ts";
+import {
+  toASCIIFrame,
+  toReadPDU,
+  toRTUFrame,
+  toWritePDU,
+} from "../src/frameBuilder.ts";
+import type { ReadRequest, WriteRequest } from "../src/modbus.ts";
 
 describe("Frame Builder", () => {
-  describe("buildReadRequest", () => {
+  describe("toReadPDU + framing", () => {
     it("builds RTU read request correctly", () => {
-      const config: ModbusReadConfig = {
+      const config: ReadRequest = {
+        address: 0x0000,
         functionCode: 3,
         quantity: 10,
         slaveId: 1,
-        startAddress: 0x0000,
       };
-
-      const frame = buildReadRequest(config, "rtu");
+      const frame = toRTUFrame(toReadPDU(config));
 
       // Expected: [0x01, 0x03, 0x00, 0x00, 0x00, 0x0A, CRC_LO, CRC_HI]
       expect(frame.length).toBe(8);
@@ -26,14 +30,13 @@ describe("Frame Builder", () => {
     });
 
     it("builds ASCII read request correctly", () => {
-      const config: ModbusReadConfig = {
+      const config: ReadRequest = {
+        address: 0x0000,
         functionCode: 3,
         quantity: 10,
         slaveId: 1,
-        startAddress: 0x0000,
       };
-
-      const frame = buildReadRequest(config, "ascii");
+      const frame = toASCIIFrame(toReadPDU(config));
       const frameString = String.fromCharCode(...frame);
 
       expect(frameString.startsWith(":")).toBe(true);
@@ -42,16 +45,15 @@ describe("Frame Builder", () => {
     });
   });
 
-  describe("buildWriteRequest", () => {
+  describe("toWritePDU + framing", () => {
     it("builds single coil write request (FC05)", () => {
-      const config: ModbusWriteConfig = {
+      const config: WriteRequest = {
         address: 0x0013,
         functionCode: 5,
         slaveId: 1,
         value: 1,
       };
-
-      const frame = buildWriteRequest(config, "rtu");
+      const frame = toRTUFrame(toWritePDU(config));
 
       expect(frame.length).toBe(8);
       expect(frame[0]).toBe(1); // slave ID
@@ -63,14 +65,13 @@ describe("Frame Builder", () => {
     });
 
     it("builds single register write request (FC06)", () => {
-      const config: ModbusWriteConfig = {
+      const config: WriteRequest = {
         address: 0x0001,
         functionCode: 6,
         slaveId: 1,
         value: 0x1234,
       };
-
-      const frame = buildWriteRequest(config, "rtu");
+      const frame = toRTUFrame(toWritePDU(config));
 
       expect(frame.length).toBe(8);
       expect(frame[0]).toBe(1); // slave ID
@@ -82,14 +83,13 @@ describe("Frame Builder", () => {
     });
 
     it("builds multiple coils write request (FC15)", () => {
-      const config: ModbusWriteConfig = {
+      const config: WriteRequest = {
         address: 0x0013,
         functionCode: 15,
         slaveId: 1,
         value: [1, 0, 1, 1, 0, 1, 0, 0, 1], // 9 bits = 2 bytes
       };
-
-      const frame = buildWriteRequest(config, "rtu");
+      const frame = toRTUFrame(toWritePDU(config));
 
       expect(frame.length).toBe(11); // slave + fc + addr(2) + qty(2) + byteCount + data(2) + crc(2)
       expect(frame[0]).toBe(1); // slave ID
@@ -105,14 +105,13 @@ describe("Frame Builder", () => {
     });
 
     it("builds multiple registers write request (FC16)", () => {
-      const config: ModbusWriteConfig = {
+      const config: WriteRequest = {
         address: 0x0001,
         functionCode: 16,
         slaveId: 1,
         value: [0x1234, 0x5678],
       };
-
-      const frame = buildWriteRequest(config, "rtu");
+      const frame = toRTUFrame(toWritePDU(config));
 
       expect(frame.length).toBe(13); // slave + fc + addr(2) + qty(2) + byteCount + data(4) + crc(2)
       expect(frame[0]).toBe(1); // slave ID
@@ -136,8 +135,8 @@ describe("Frame Builder", () => {
         slaveId: 1,
         value: 0,
       };
-
-      expect(() => buildWriteRequest(config, "rtu")).toThrow(
+      // biome-ignore lint/suspicious/noExplicitAny: intentional for unsupported function code test
+      expect(() => toWritePDU(config as any)).toThrow(
         "Unsupported function code: 99",
       );
     });

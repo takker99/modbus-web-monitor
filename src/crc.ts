@@ -28,8 +28,8 @@ for (let i = 0; i < 256; i++) {
 export function calculateCRC16(buffer: Uint8Array | number[]): number {
   const buf = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   let crc = 0xffff;
-  for (let i = 0; i < buf.length; i++) {
-    crc = ((crc >>> 8) & 0xff) ^ CRC_TABLE[(crc ^ buf[i]) & 0xff];
+  for (const byte of buf) {
+    crc = ((crc >>> 8) & 0xff) ^ CRC_TABLE[(crc ^ byte) & 0xff];
   }
   return crc & 0xffff;
 }
