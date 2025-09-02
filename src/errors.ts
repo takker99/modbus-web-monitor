@@ -3,7 +3,7 @@
  */
 
 /** Modbus exception codes as defined in the specification. */
-export const MODBUS_EXCEPTION_CODES: Record<number, string> = {
+export const MODBUS_EXCEPTION_CODES = {
   1: "Illegal function",
   2: "Illegal data address (address does not exist)",
   3: "Illegal data value",
@@ -28,7 +28,9 @@ export class ModbusError extends Error {
 
 /** Error for Modbus exception responses (function code | 0x80). */
 export class ModbusExceptionError extends ModbusError {
-  constructor(public readonly exceptionCode: number) {
+  constructor(
+    public readonly exceptionCode: keyof typeof MODBUS_EXCEPTION_CODES,
+  ) {
     const message =
       MODBUS_EXCEPTION_CODES[exceptionCode] ||
       `Unknown exception ${exceptionCode}`;

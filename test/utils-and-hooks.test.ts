@@ -12,7 +12,7 @@ import {
   parseCoilValues,
   parseRegisterValues,
 } from "../src/frontend/modbusUtils.ts";
-import { act, renderHook } from "./vitest-render-hook";
+import { act, renderHook } from "./vitest-render-hook.ts";
 
 // --- Pure utilities ---
 describe("modbusUtils", () => {

@@ -1,3 +1,5 @@
+import type { ReadFunctionCode, WriteFunctionCode } from "./functionCodes";
+
 /**
  * High-level Modbus response object used by the client API and UI.
  */
@@ -6,8 +8,6 @@ export interface ModbusResponse {
   slaveId: number;
   /** Function code (without exception bit). */
   functionCode: number;
-  /** Human-readable label for the function code. */
-  functionCodeLabel: string;
   /** Decoded data payload (registers or bits). */
   data: number[];
   /** Optional address associated with the response (if applicable). */
@@ -16,22 +16,20 @@ export interface ModbusResponse {
   timestamp: Date;
 }
 
-/**
- * Configuration for read requests.
- */
-export interface ModbusReadConfig {
+export interface ReadRequest {
   slaveId: number;
-  functionCode: 1 | 2 | 3 | 4;
-  startAddress: number;
+  functionCode: ReadFunctionCode;
+  address: number;
   quantity: number;
 }
 
-/**
- * Configuration for write requests.
- */
-export interface ModbusWriteConfig {
+export interface WriteRequest {
   slaveId: number;
-  functionCode: 5 | 6 | 15 | 16;
+  functionCode: WriteFunctionCode;
   address: number;
   value: number | number[];
+}
+
+export interface RequestOptions {
+  signal?: AbortSignal;
 }

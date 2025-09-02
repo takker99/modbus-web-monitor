@@ -11,7 +11,7 @@ import {
   parseCoilValues,
   parseRegisterValues,
 } from "../src/frontend/modbusUtils.ts";
-import { renderHook } from "./vitest-render-hook";
+import { renderHook } from "./vitest-render-hook.ts";
 
 // Edge case helpers for modbusUtils
 

@@ -4,7 +4,11 @@
 import { MockTransport } from "./mock-transport.ts";
 import { SerialTransport } from "./serial-transport.ts";
 import { TcpTransport } from "./tcp-transport.ts";
-import { TransportRegistry } from "./transport.ts";
+import {
+  type IModbusTransport,
+  type TransportConfig,
+  TransportRegistry,
+} from "./transport.ts";
 
 /**
  * Register the built-in transports with the TransportRegistry.
@@ -51,8 +55,6 @@ export type {
 export { TransportRegistry } from "./transport.ts";
 
 // Convenience helper to create transports via the registry
-export function createTransport(
-  config: import("./transport.ts").TransportConfig,
-): import("./transport.ts").IModbusTransport {
+export function createTransport(config: TransportConfig): IModbusTransport {
   return TransportRegistry.create(config);
 }

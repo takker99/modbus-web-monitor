@@ -224,7 +224,7 @@ export function App() {
         setData((prev) => [...prev.slice(-99), resp]);
         addLog(
           "Info",
-          `Modbus response (${resp.functionCodeLabel}): received ${resp.data.length} values`,
+          `Modbus response (FC ${resp.functionCode}): received ${resp.data.length} values`,
         );
       } else if (result) {
         addLog("Error", `Read error: ${result.error.message}`);

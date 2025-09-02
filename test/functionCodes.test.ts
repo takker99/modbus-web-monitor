@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { FUNCTION_CODE_LABELS } from "../src/frontend/modbusUtils.ts";
 import {
-  FUNCTION_CODE_LABELS,
+  FUNCTION_CODES,
   isBitBasedFunctionCode,
+  isFunctionCode,
   isReadFunctionCode,
   isRegisterBasedFunctionCode,
-  isValidFunctionCode,
   isWriteFunctionCode,
-  VALID_FUNCTION_CODES,
 } from "../src/functionCodes.ts";
 
 describe("Function Code Utilities", () => {
@@ -18,21 +18,21 @@ describe("Function Code Utilities", () => {
     });
 
     it("includes all supported function codes", () => {
-      expect(VALID_FUNCTION_CODES).toEqual([1, 2, 3, 4, 5, 6, 15, 16]);
+      expect(FUNCTION_CODES).toEqual([1, 2, 3, 4, 5, 6, 15, 16]);
     });
   });
 
   describe("isValidFunctionCode", () => {
     it("returns true for valid function codes", () => {
-      for (const code of VALID_FUNCTION_CODES) {
-        expect(isValidFunctionCode(code)).toBe(true);
+      for (const code of FUNCTION_CODES) {
+        expect(isFunctionCode(code)).toBe(true);
       }
     });
 
     it("returns false for invalid function codes", () => {
-      expect(isValidFunctionCode(0)).toBe(false);
-      expect(isValidFunctionCode(7)).toBe(false);
-      expect(isValidFunctionCode(255)).toBe(false);
+      expect(isFunctionCode(0)).toBe(false);
+      expect(isFunctionCode(7)).toBe(false);
+      expect(isFunctionCode(255)).toBe(false);
     });
   });
 

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { buildReadRequest, buildWriteRequest } from "../src/frameBuilder.ts";
-import type { ModbusReadConfig, ModbusWriteConfig } from "../src/modbus.ts";
+import type { ReadRequest, WriteRequest } from "../src/modbus.ts";
 
 describe("Frame Builder", () => {
   describe("buildReadRequest", () => {
     it("builds RTU read request correctly", () => {
-      const config: ModbusReadConfig = {
+      const config: ReadRequest = {
+        address: 0x0000,
         functionCode: 3,
         quantity: 10,
         slaveId: 1,
-        startAddress: 0x0000,
       };
 
       const frame = buildReadRequest(config, "rtu");
@@ -26,11 +26,11 @@ describe("Frame Builder", () => {
     });
 
     it("builds ASCII read request correctly", () => {
-      const config: ModbusReadConfig = {
+      const config: ReadRequest = {
+        address: 0x0000,
         functionCode: 3,
         quantity: 10,
         slaveId: 1,
-        startAddress: 0x0000,
       };
 
       const frame = buildReadRequest(config, "ascii");
@@ -44,7 +44,7 @@ describe("Frame Builder", () => {
 
   describe("buildWriteRequest", () => {
     it("builds single coil write request (FC05)", () => {
-      const config: ModbusWriteConfig = {
+      const config: WriteRequest = {
         address: 0x0013,
         functionCode: 5,
         slaveId: 1,
@@ -63,7 +63,7 @@ describe("Frame Builder", () => {
     });
 
     it("builds single register write request (FC06)", () => {
-      const config: ModbusWriteConfig = {
+      const config: WriteRequest = {
         address: 0x0001,
         functionCode: 6,
         slaveId: 1,
@@ -82,7 +82,7 @@ describe("Frame Builder", () => {
     });
 
     it("builds multiple coils write request (FC15)", () => {
-      const config: ModbusWriteConfig = {
+      const config: WriteRequest = {
         address: 0x0013,
         functionCode: 15,
         slaveId: 1,
@@ -105,7 +105,7 @@ describe("Frame Builder", () => {
     });
 
     it("builds multiple registers write request (FC16)", () => {
-      const config: ModbusWriteConfig = {
+      const config: WriteRequest = {
         address: 0x0001,
         functionCode: 16,
         slaveId: 1,

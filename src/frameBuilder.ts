@@ -7,7 +7,7 @@
 
 import { calculateCRC16 } from "./crc.ts";
 import { calculateLRC } from "./lrc.ts";
-import type { ModbusReadConfig, ModbusWriteConfig } from "./modbus.ts";
+import type { ReadRequest, WriteRequest } from "./modbus.ts";
 
 /**
  * Supported Modbus transport protocols used by the frame builders.
@@ -25,14 +25,14 @@ export type ModbusProtocol = "rtu" | "ascii";
  * @returns Serialized request bytes for the target protocol.
  */
 export function buildReadRequest(
-  config: ModbusReadConfig,
+  config: ReadRequest,
   protocol: ModbusProtocol = "rtu",
 ): Uint8Array {
   const request = [
     config.slaveId,
     config.functionCode,
-    (config.startAddress >> 8) & 0xff,
-    config.startAddress & 0xff,
+    (config.address >> 8) & 0xff,
+    config.address & 0xff,
     (config.quantity >> 8) & 0xff,
     config.quantity & 0xff,
   ];
@@ -53,7 +53,7 @@ export function buildReadRequest(
  *         selected function code.
  */
 export function buildWriteRequest(
-  config: ModbusWriteConfig,
+  config: WriteRequest,
   protocol: ModbusProtocol = "rtu",
 ): Uint8Array {
   let request: number[];

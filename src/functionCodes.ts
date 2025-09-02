@@ -5,23 +5,11 @@
  * and small predicate helpers used throughout the codebase and tests.
  */
 
-/** Human-friendly labels for known function codes (used in the UI). */
-export const FUNCTION_CODE_LABELS: Record<FunctionCode, string> = {
-  1: "Coils",
-  2: "Discrete Inputs",
-  3: "Holding Registers",
-  4: "Input Registers",
-  5: "Single Coil Write",
-  6: "Single Register Write",
-  15: "Multiple Coils Write",
-  16: "Multiple Registers Write",
-} as const;
-
 /** Tuple of valid function codes supported by this implementation. */
-export const VALID_FUNCTION_CODES = [1, 2, 3, 4, 5, 6, 15, 16] as const;
+export const FUNCTION_CODES = [1, 2, 3, 4, 5, 6, 15, 16] as const;
 
 /** Numeric union of supported function codes. */
-export type FunctionCode = (typeof VALID_FUNCTION_CODES)[number];
+export type FunctionCode = (typeof FUNCTION_CODES)[number];
 
 /** Read-only function codes (FC01-FC04). */
 export type ReadFunctionCode = 1 | 2 | 3 | 4;
@@ -39,8 +27,8 @@ export type WriteFunctionCode =
  *
  * @param code - Numeric function code
  */
-export function isValidFunctionCode(code: number): code is FunctionCode {
-  return VALID_FUNCTION_CODES.includes(code as FunctionCode);
+export function isFunctionCode(code: number): code is FunctionCode {
+  return FUNCTION_CODES.includes(code as FunctionCode);
 }
 
 /**
@@ -67,7 +55,7 @@ export function isWriteFunctionCode(code: number): code is WriteFunctionCode {
  * @param code - Numeric function code
  */
 export function isBitBasedFunctionCode(code: number): code is 1 | 2 {
-  return isValidFunctionCode(code) && (code === 1 || code === 2);
+  return code === 1 || code === 2;
 }
 
 /**
@@ -76,5 +64,5 @@ export function isBitBasedFunctionCode(code: number): code is 1 | 2 {
  * @param code - Numeric function code
  */
 export function isRegisterBasedFunctionCode(code: number): code is 3 | 4 {
-  return isValidFunctionCode(code) && (code === 3 || code === 4);
+  return code === 3 || code === 4
 }

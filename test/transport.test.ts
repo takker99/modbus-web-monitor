@@ -7,6 +7,7 @@ import {
   type SerialTransportConfig,
   TransportRegistry,
 } from "../src/transport/index.ts";
+import { TcpTransport } from "../src/transport/tcp-transport.ts";
 
 // Clean minimal transport tests (EventTarget API)
 describe("transport: minimal", () => {
@@ -92,7 +93,6 @@ describe("transport: minimal", () => {
   });
 
   it("tcp unsupported connect", async () => {
-    const { TcpTransport } = await import("../src/transport/tcp-transport.ts");
     const tcp = new TcpTransport({ host: "localhost", port: 502, type: "tcp" });
     await expect(tcp.connect()).rejects.toThrow("TCP transport not supported");
   });

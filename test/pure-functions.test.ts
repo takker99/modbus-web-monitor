@@ -55,7 +55,6 @@ describe("Pure Function API", () => {
       if (isOk(result)) {
         expect(result.data.slaveId).toBe(1);
         expect(result.data.functionCode).toBe(1);
-        expect(result.data.functionCodeLabel).toBe("Coils");
         expect(result.data.address).toBe(0);
         expect(result.data.data).toHaveLength(8);
         // First 8 bits of 0xAB (171): 1,1,0,1,0,1,0,1
@@ -82,7 +81,6 @@ describe("Pure Function API", () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.data.functionCode).toBe(2);
-        expect(result.data.functionCodeLabel).toBe("Discrete Inputs");
         expect(result.data.address).toBe(10);
         expect(result.data.data.slice(0, 5)).toEqual([1, 1, 1, 1, 1]);
       }
@@ -107,7 +105,6 @@ describe("Pure Function API", () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.data.functionCode).toBe(3);
-        expect(result.data.functionCodeLabel).toBe("Holding Registers");
         expect(result.data.data).toEqual([0x1234, 0x5678]);
       }
     });
@@ -131,7 +128,6 @@ describe("Pure Function API", () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.data.functionCode).toBe(4);
-        expect(result.data.functionCodeLabel).toBe("Input Registers");
         expect(result.data.data).toEqual([0xabcd]);
       }
     });

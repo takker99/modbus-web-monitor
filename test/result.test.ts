@@ -4,7 +4,6 @@ import {
   andThen,
   combine,
   err,
-  fromPromise,
   isErr,
   isOk,
   map,
@@ -12,7 +11,6 @@ import {
   mapErr,
   ok,
   type Result,
-  toPromise,
   unwrap,
   unwrapOr,
 } from "../src/result.ts";
@@ -142,42 +140,6 @@ describe("Result Type", () => {
       if (isErr(chained)) {
         expect(chained.error).toBe(chainError);
       }
-    });
-  });
-
-  describe("Promise Integration", () => {
-    it("should convert successful promise to Ok result", async () => {
-      const promise = Promise.resolve(42);
-      const result = await fromPromise(promise);
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.data).toBe(42);
-      }
-    });
-
-    it("should convert failed promise to Err result", async () => {
-      const error = new Error("promise failed");
-      const promise = Promise.reject(error);
-      const result = await fromPromise(promise);
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error).toBe(error);
-      }
-    });
-
-    it("should convert Ok result to successful promise", async () => {
-      const result = ok(42);
-      const value = await toPromise(result);
-      expect(value).toBe(42);
-    });
-
-    it("should convert Err result to failed promise", async () => {
-      const error = new Error("test error");
-      const result = err(error);
-
-      await expect(toPromise(result)).rejects.toBe(error);
     });
   });
 

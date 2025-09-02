@@ -1,23 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 import { ModbusExceptionError } from "../src/errors.ts";
 import { buildWriteRequest } from "../src/frameBuilder.ts";
-import type { ModbusWriteConfig } from "../src/modbus.ts";
+import type { WriteRequest } from "../src/modbus.ts";
 import { SerialManager } from "../src/serial.ts";
 
 // Helper to build a minimal write config
-function writeCfg(overrides: Partial<ModbusWriteConfig>): ModbusWriteConfig {
+function writeCfg(overrides: Partial<WriteRequest>): WriteRequest {
   return {
     address: 0x0000,
     functionCode: 5,
     slaveId: 1,
     value: 1,
     ...overrides,
-  } as ModbusWriteConfig;
+  };
 }
 
 describe("errors.ts additional branches", () => {
   it("ModbusExceptionError unknown exception code uses fallback message", () => {
-    const err = new ModbusExceptionError(0x7f); // not in map
+    // biome-ignore lint/suspicious/noExplicitAny: For test case
+    const err = new ModbusExceptionError(0x7f as any); // not in map
     expect(err.message).toMatch(/Unknown exception 127/);
   });
 });
@@ -136,6 +137,7 @@ describe("SerialManager negative paths", () => {
   });
 });
 
+import { readHoldingRegisters } from "../src/ascii.ts";
 import { readHoldingRegisters as readHoldingRegistersRTU } from "../src/rtu.ts";
 // Extra abort pre-check coverage for pure function APIs
 import { MockTransport } from "../src/transport/mock-transport.ts";
@@ -150,14 +152,9 @@ describe("Abort pre-check coverage", () => {
     const rtuResult = await readHoldingRegistersRTU(transport, 1, 0, 1, {
       signal: c.signal,
     });
-    const asciiModule = await import("../src/ascii.ts");
-    const asciiResult = await asciiModule.readHoldingRegisters(
-      transport,
-      1,
-      0,
-      1,
-      { signal: c.signal },
-    );
+    const asciiResult = await readHoldingRegisters(transport, 1, 0, 1, {
+      signal: c.signal,
+    });
     expect(rtuResult.success).toBe(false);
     expect(asciiResult.success).toBe(false);
   });

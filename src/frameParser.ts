@@ -4,21 +4,9 @@
 
 import { calculateCRC16 } from "./crc.ts";
 import { ModbusCRCError, ModbusFrameError, ModbusLRCError } from "./errors.ts";
-import { isValidFunctionCode } from "./functionCodes.ts";
+import { isFunctionCode } from "./functionCodes.ts";
 import { calculateLRC } from "./lrc.ts";
-
-/**
- * Result type for frame parsing operations.
- */
-export type ParseResult<T> =
-  | {
-      success: true;
-      data: T;
-    }
-  | {
-      success: false;
-      error: Error;
-    };
+import type { Result } from "./result.ts";
 
 /**
  * Parsed frame shape returned by the parsers.
@@ -135,9 +123,9 @@ export function isPlausibleFrameStart(
   if (slaveId < 1 || slaveId > 247) return false;
 
   const isException =
-    (functionCode & 0x80) !== 0 && isValidFunctionCode(functionCode & 0x7f);
+    (functionCode & 0x80) !== 0 && isFunctionCode(functionCode & 0x7f);
 
-  return isValidFunctionCode(functionCode) || isException;
+  return isFunctionCode(functionCode) || isException;
 }
 
 /**
@@ -161,7 +149,7 @@ export function findFrameResyncPosition(buffer: number[]): number {
  * Returns a ParseResult which contains either the parsed frame or an error
  * describing why parsing failed.
  */
-export function parseRTUFrame(buffer: number[]): ParseResult<ParsedFrame> {
+export function parseRTUFrame(buffer: number[]): Result<ParsedFrame> {
   if (buffer.length < 5) {
     return {
       error: new ModbusFrameError("RTU frame too short (minimum 5 bytes)"),
@@ -261,7 +249,7 @@ export function parseRTUFrame(buffer: number[]): ParseResult<ParsedFrame> {
  * The function accepts a full ASCII frame (including leading ':') and
  * returns the parsed payload or an error on invalid format / LRC mismatch.
  */
-export function parseASCIIFrame(frameString: string): ParseResult<ParsedFrame> {
+export function parseASCIIFrame(frameString: string): Result<ParsedFrame> {
   // Accept frames optionally terminated with CRLF ("\r\n"). The caller (ASCII stream scanner)
   // currently slices including CRLF, so we normalize here to simplify downstream parsing.
   if (frameString.endsWith("\r\n")) {

@@ -1,6 +1,12 @@
 // Minimal additional coverage for edge cases
 import { describe, expect, it } from "vitest";
+import {
+  ModbusCRCError,
+  ModbusFrameError,
+  ModbusLRCError,
+} from "../src/errors.ts";
 import { createTransport, TransportRegistry } from "../src/transport/index.ts";
+import { TcpTransport } from "../src/transport/tcp-transport.ts";
 import type { TransportConfig } from "../src/transport/transport.ts";
 
 describe("Final Coverage", () => {
@@ -43,10 +49,6 @@ describe("Final Coverage", () => {
 
   describe("Error handling edge cases", () => {
     it("should exercise more error paths", async () => {
-      const { ModbusFrameError, ModbusCRCError, ModbusLRCError } = await import(
-        "../src/errors.ts"
-      );
-
       // Create instances to exercise constructors
       const frameError = new ModbusFrameError("Test frame error");
       expect(frameError.message).toBe("Frame error: Test frame error");
@@ -61,11 +63,6 @@ describe("Final Coverage", () => {
 
   describe("Index file coverage", () => {
     it("should handle missing transport cases in index", async () => {
-      const { TcpTransport } = await import(
-        "../src/transport/tcp-transport.ts"
-      );
-      const { createTransport } = await import("../src/transport/index.ts");
-
       // Just exercise the import path
       expect(TcpTransport).toBeDefined();
 

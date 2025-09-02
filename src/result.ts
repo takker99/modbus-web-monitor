@@ -64,25 +64,6 @@ export function andThen<T, U, E>(
   return isOk(result) ? fn(result.data) : result;
 }
 
-// Convert Promise<T> to Promise<Result<T, Error>>
-export async function fromPromise<T>(
-  promise: Promise<T>,
-): Promise<Result<T, Error>> {
-  try {
-    const data = await promise;
-    return ok(data);
-  } catch (error) {
-    return err(error as Error);
-  }
-}
-
-// Convert Result<T, E> to Promise<T>
-export function toPromise<T, E>(result: Result<T, E>): Promise<T> {
-  return isOk(result)
-    ? Promise.resolve(result.data)
-    : Promise.reject(result.error);
-}
-
 // Combine multiple results
 export function combine<T extends readonly unknown[], E>(
   results: { [K in keyof T]: Result<T[K], E> },

@@ -57,7 +57,6 @@ describe("API Integration", () => {
 
     if (isOk(readResult)) {
       expect(readResult.data.data).toEqual([0x1234, 0x5678]);
-      expect(readResult.data.functionCodeLabel).toBe("Holding Registers");
     }
 
     // Test pure function API write

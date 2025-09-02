@@ -1,6 +1,6 @@
 // RTU-specific pure function API extracted from pure-functions.ts
 // Provides a functional interface for Modbus RTU without bundling ASCII logic
-import { ModbusExceptionError } from "./errors.ts";
+import { type MODBUS_EXCEPTION_CODES, ModbusExceptionError } from "./errors.ts";
 import { buildReadRequest, buildWriteRequest } from "./frameBuilder.ts";
 import {
   getExpectedResponseLength,
@@ -8,120 +8,108 @@ import {
   parseRegisterResponse,
   validateRTUFrame,
 } from "./frameParser.ts";
-import { FUNCTION_CODE_LABELS, isValidFunctionCode } from "./functionCodes.ts";
-import type { ModbusResponse } from "./modbus.ts";
+import type {
+  ModbusResponse,
+  ReadRequest,
+  RequestOptions,
+  WriteRequest,
+} from "./modbus.ts";
 import type { Result } from "./result.ts";
 import { err, ok } from "./result.ts";
 import type { IModbusTransport } from "./transport/transport.ts";
 
-export interface ReadRequest {
-  unitId: number;
-  functionCode: 1 | 2 | 3 | 4;
-  address: number;
-  quantity: number;
-}
-export interface WriteRequest {
-  unitId: number;
-  functionCode: 5 | 6 | 15 | 16;
-  address: number;
-  value: number | number[];
-}
-export interface RequestOptions {
-  signal?: AbortSignal;
-}
-
 export async function readCoils(
   transport: IModbusTransport,
-  unitId: number,
+  slaveId: number,
   address: number,
   quantity: number,
   options: RequestOptions = {},
 ): Promise<Result<ModbusResponse, Error>> {
-  return executeReadRequest(
+  return read(
     transport,
-    { address, functionCode: 1, quantity, unitId },
+    { address, functionCode: 1, quantity, slaveId },
     options,
   );
 }
 export async function readDiscreteInputs(
   transport: IModbusTransport,
-  unitId: number,
+  slaveId: number,
   address: number,
   quantity: number,
   options: RequestOptions = {},
 ): Promise<Result<ModbusResponse, Error>> {
-  return executeReadRequest(
+  return read(
     transport,
-    { address, functionCode: 2, quantity, unitId },
+    { address, functionCode: 2, quantity, slaveId },
     options,
   );
 }
 export async function readHoldingRegisters(
   transport: IModbusTransport,
-  unitId: number,
+  slaveId: number,
   address: number,
   quantity: number,
   options: RequestOptions = {},
 ): Promise<Result<ModbusResponse, Error>> {
-  return executeReadRequest(
+  return read(
     transport,
-    { address, functionCode: 3, quantity, unitId },
+    { address, functionCode: 3, quantity, slaveId },
     options,
   );
 }
 export async function readInputRegisters(
   transport: IModbusTransport,
-  unitId: number,
+  slaveId: number,
   address: number,
   quantity: number,
   options: RequestOptions = {},
 ): Promise<Result<ModbusResponse, Error>> {
-  return executeReadRequest(
+  return read(
     transport,
-    { address, functionCode: 4, quantity, unitId },
+    { address, functionCode: 4, quantity, slaveId },
     options,
   );
 }
 
 export async function writeSingleCoil(
   transport: IModbusTransport,
-  unitId: number,
+  slaveId: number,
   address: number,
   value: boolean,
   options: RequestOptions = {},
 ): Promise<Result<void, Error>> {
-  return executeWriteRequest(
+  return write(
     transport,
-    { address, functionCode: 5, unitId, value: value ? 1 : 0 },
+    { address, functionCode: 5, slaveId, value: value ? 1 : 0 },
     options,
   );
 }
 export async function writeSingleRegister(
   transport: IModbusTransport,
-  unitId: number,
+  slaveId: number,
   address: number,
   value: number,
   options: RequestOptions = {},
 ): Promise<Result<void, Error>> {
-  return executeWriteRequest(
+  return write(
     transport,
-    { address, functionCode: 6, unitId, value },
+    { address, functionCode: 6, slaveId, value },
     options,
   );
 }
 export async function writeMultipleCoils(
   transport: IModbusTransport,
-  unitId: number,
+  slaveId: number,
   address: number,
   values: boolean[],
   options: RequestOptions = {},
 ): Promise<Result<void, Error>> {
-  return executeWriteRequest(
+  return write(
     transport,
     {
       address,
       functionCode: 15,
-      unitId,
+      slaveId,
       value: values.map((v) => (v ? 1 : 0)),
     },
     options,
@@ -129,38 +117,30 @@ export async function writeMultipleCoils(
 }
 export async function writeMultipleRegisters(
   transport: IModbusTransport,
-  unitId: number,
+  slaveId: number,
   address: number,
   values: number[],
   options: RequestOptions = {},
 ): Promise<Result<void, Error>> {
-  return executeWriteRequest(
+  return write(
     transport,
-    { address, functionCode: 16, unitId, value: values },
+    { address, functionCode: 16, slaveId, value: values },
     options,
   );
 }
 
-async function executeReadRequest(
+async function read(
   transport: IModbusTransport,
   request: ReadRequest,
   options: RequestOptions,
 ): Promise<Result<ModbusResponse, Error>> {
   if (!transport.connected) return err(new Error("Transport not connected"));
   try {
-    const requestFrame = buildReadRequest(
-      {
-        functionCode: request.functionCode,
-        quantity: request.quantity,
-        slaveId: request.unitId,
-        startAddress: request.address,
-      },
-      "rtu",
-    );
-    const responseResult = await sendRTURequestAndWait(
+    const requestFrame = buildReadRequest(request, "rtu");
+    const responseResult = await send(
       transport,
       requestFrame,
-      request.unitId,
+      request.slaveId,
       request.functionCode,
       options.signal,
     );
@@ -178,10 +158,7 @@ async function executeReadRequest(
       address: request.address,
       data,
       functionCode: request.functionCode,
-      functionCodeLabel: isValidFunctionCode(request.functionCode)
-        ? FUNCTION_CODE_LABELS[request.functionCode]
-        : `Unknown (${request.functionCode})`,
-      slaveId: request.unitId,
+      slaveId: request.slaveId,
       timestamp: new Date(),
     };
     return ok(response);
@@ -190,26 +167,18 @@ async function executeReadRequest(
   }
 }
 
-async function executeWriteRequest(
+async function write(
   transport: IModbusTransport,
   request: WriteRequest,
   options: RequestOptions,
 ): Promise<Result<void, Error>> {
   if (!transport.connected) return err(new Error("Transport not connected"));
   try {
-    const requestFrame = buildWriteRequest(
-      {
-        address: request.address,
-        functionCode: request.functionCode,
-        slaveId: request.unitId,
-        value: request.value,
-      },
-      "rtu",
-    );
-    const responseResult = await sendRTURequestAndWait(
+    const requestFrame = buildWriteRequest(request, "rtu");
+    const responseResult = await send(
       transport,
       requestFrame,
-      request.unitId,
+      request.slaveId,
       request.functionCode,
       options.signal,
     );
@@ -220,7 +189,7 @@ async function executeWriteRequest(
   }
 }
 
-async function sendRTURequestAndWait(
+async function send(
   transport: IModbusTransport,
   requestFrame: Uint8Array,
   expectedUnitId: number,
@@ -262,7 +231,13 @@ async function sendRTURequestAndWait(
           if (buffer.length >= 5) {
             const errorCode = buffer[2];
             cleanup();
-            resolve(err(new ModbusExceptionError(errorCode)));
+            resolve(
+              err(
+                new ModbusExceptionError(
+                  errorCode as keyof typeof MODBUS_EXCEPTION_CODES,
+                ),
+              ),
+            );
             return;
           }
           break;

@@ -1,6 +1,6 @@
 import type { FunctionalComponent } from "preact";
-import { FUNCTION_CODE_LABELS } from "../../functionCodes.ts";
 import type { ModbusResponse } from "../../modbus.ts";
+import { FUNCTION_CODE_LABELS } from "../modbusUtils.ts";
 
 interface Props {
   data: ModbusResponse[];
@@ -67,11 +67,9 @@ export const DataDisplayPanel: FunctionalComponent<Props> = ({
                 return (
                   <tr key={`resp-${resp.timestamp.getTime()}-${addr}-${idx}`}>
                     <td>
-                      {resp.functionCodeLabel ||
-                        FUNCTION_CODE_LABELS[
-                          resp.functionCode as keyof typeof FUNCTION_CODE_LABELS
-                        ] ||
-                        `FC${resp.functionCode}`}
+                      {FUNCTION_CODE_LABELS[
+                        resp.functionCode as keyof typeof FUNCTION_CODE_LABELS
+                      ] || `FC${resp.functionCode}`}
                     </td>
                     <td>{formatAddress(addr)}</td>
                     <td>{formatValue(value)}</td>

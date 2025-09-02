@@ -1,6 +1,8 @@
 // Utility functions extracted from App.tsx to reduce component size
 // and enable focused unit testing. All functions are pure.
 
+import type { FunctionCode } from "../functionCodes";
+
 export interface ParseOptions {
   hex?: boolean; // interpret numeric strings as hex (allow optional 0x prefix)
 }
@@ -88,3 +90,15 @@ export function formatAddress(
 }
 
 export type LogEntry = { timestamp: string; type: string; message: string };
+
+/** Human-friendly labels for known function codes (used in the UI). */
+export const FUNCTION_CODE_LABELS: Record<FunctionCode, string> = {
+  1: "Coils",
+  2: "Discrete Inputs",
+  3: "Holding Registers",
+  4: "Input Registers",
+  5: "Single Coil Write",
+  6: "Single Register Write",
+  15: "Multiple Coils Write",
+  16: "Multiple Registers Write",
+} as const;

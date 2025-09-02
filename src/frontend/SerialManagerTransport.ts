@@ -12,7 +12,7 @@ export class SerialManagerTransport implements IModbusTransport {
     stopBits: 1 as 1 | 2,
     type: "serial" as const,
   };
-  private target = new EventTarget();
+  #target = new EventTarget();
   constructor(
     private sm: SerialManager,
     private log: (t: string, m: string) => void,
@@ -41,7 +41,7 @@ export class SerialManagerTransport implements IModbusTransport {
         new CustomEvent<Error>("error", { detail: err }),
         { error: err },
       );
-      this.target.dispatchEvent(ev);
+      this.#target.dispatchEvent(ev);
     });
   }
   addEventListener<K extends keyof TransportEventMap>(

@@ -31,7 +31,7 @@ describe("ASCII API full coverage", () => {
 
   it("readHoldingRegisters success", async () => {
     buildReadRequest(
-      { functionCode: 3, quantity: 2, slaveId: 1, startAddress: 0x0002 },
+      { address: 0x0002, functionCode: 3, quantity: 2, slaveId: 1 },
       "ascii",
     );
     // Response: slave 1, fc3, byteCount 4, registers 0x0011 0x2233
@@ -45,7 +45,7 @@ describe("ASCII API full coverage", () => {
 
   it("readCoils success (bits)", async () => {
     buildReadRequest(
-      { functionCode: 1, quantity: 10, slaveId: 1, startAddress: 0x0000 },
+      { address: 0x0000, functionCode: 1, quantity: 10, slaveId: 1 },
       "ascii",
     );
     // byteCount = 2 (at least to hold 10 bits). Provide pattern 0b1010_1100, 0b00000011
@@ -95,7 +95,7 @@ describe("ASCII API full coverage", () => {
 
   it("exception frame", async () => {
     buildReadRequest(
-      { functionCode: 3, quantity: 1, slaveId: 1, startAddress: 0x0000 },
+      { address: 0x0000, functionCode: 3, quantity: 1, slaveId: 1 },
       "ascii",
     );
     // Exception: functionCode | 0x80, exception code 2 (Illegal Data Address). Payload: slave, fc|0x80, exCode

@@ -25,7 +25,6 @@ function makeResp(fc: number, data: number[]): ModbusResponse {
   return {
     data,
     functionCode: fc,
-    functionCodeLabel: `FC${fc}`,
     slaveId: 1,
     timestamp: new Date(),
   };
