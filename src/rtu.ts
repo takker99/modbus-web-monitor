@@ -4,7 +4,6 @@ import {
   createErr,
   createOk,
   isErr,
-  isOk,
   type Result,
   unwrapOk,
 } from "option-t/plain_result";
@@ -14,7 +13,7 @@ import {
   getExpectedResponseLength,
   parseBitResponse,
   parseRegisterResponse,
-  validateRTUFrame,
+  parseRTUFrame,
 } from "./frameParser.ts";
 import { isRegisterBasedFunctionCode } from "./functionCodes.ts";
 import type {
@@ -23,7 +22,54 @@ import type {
   RequestOptions,
   WriteRequest,
 } from "./modbus.ts";
+import { byteStreamFromTransport } from "./stream.ts";
 import type { IModbusTransport } from "./transport/transport.ts";
+
+/**
+ * Async generator that consumes raw byte chunks and yields validated RTU frames
+ * (full raw frame bytes including CRC) while performing resynchronisation.
+ *
+ * Contract:
+ *  - Yields only frames that pass `parseRTUFrame` (CRC OK, structure OK)
+ *  - Discards / shifts one byte on parse or CRC failure to resync
+ *  - Scans for expected function code match performed by caller (to keep it generic)
+ *  - Stops when upstream iterable ends (partial trailing data ignored)
+ */
+export async function* rtuFrameStream(
+  source: AsyncIterable<Uint8Array>,
+  signal?: AbortSignal,
+): AsyncGenerator<Uint8Array, void, unknown> {
+  const buffer: number[] = [];
+  try {
+    for await (const chunk of source) {
+      buffer.push(...chunk);
+      // Attempt extraction loop
+      while (buffer.length >= 5) {
+        // We don't know expected length until we have at least address+fc+maybe bytecount
+        const expectedLength = getExpectedResponseLength(buffer);
+        if (expectedLength === -1) {
+          // Can't determine yet or invalid start -> shift one for resync
+          buffer.shift();
+          continue;
+        }
+        if (buffer.length < expectedLength) break; // need more bytes
+        const candidate = buffer.slice(0, expectedLength);
+        const parsed = parseRTUFrame(candidate);
+        if (isErr(parsed)) {
+          // CRC / format fail -> discard first byte and retry
+          buffer.shift();
+          continue;
+        }
+        yield new Uint8Array(candidate);
+        buffer.splice(0, expectedLength); // remove emitted frame
+      }
+    }
+  } catch (e) {
+    // Propagate abort separately (consumer can decide), others rethrow
+    if (signal?.aborted) return;
+    throw e;
+  }
+}
 
 /** Read coil status bits (FC01) using RTU protocol. */
 export async function readCoils(
@@ -216,99 +262,41 @@ async function send(
   expectedFunctionCode: number,
   signal?: AbortSignal,
 ): Promise<Result<Uint8Array, Error>> {
-  return new Promise((resolve) => {
-    if (signal?.aborted) {
-      resolve(
-        createErr(
-          signal.reason instanceof Error ? signal.reason : new Error("Aborted"),
-        ),
-      );
-      return;
-    }
-    const abortHandler = () => {
-      cleanup();
-      resolve(
-        createErr(
-          signal?.reason instanceof Error
-            ? signal.reason
-            : new Error("Aborted"),
-        ),
-      );
-    };
-    const buffer: number[] = [];
-    const onMessage = (ev: Event) => {
-      const data = (ev as CustomEvent<Uint8Array>).detail;
-      if (!data) return; // defensive
-      buffer.push(...Array.from(data));
-      while (buffer.length >= 5) {
-        const unitId = buffer[0];
-        const functionCode = buffer[1];
-        const isMatch =
-          unitId === expectedUnitId &&
-          (functionCode === expectedFunctionCode ||
-            (functionCode & 0x80 &&
-              (functionCode & 0x7f) === expectedFunctionCode));
-        if (!isMatch) {
-          buffer.shift();
-          continue;
-        }
-        if (functionCode & 0x80) {
-          if (buffer.length >= 5) {
-            const errorCode = buffer[2];
-            cleanup();
-            resolve(createErr(new ModbusExceptionError(errorCode)));
-            return;
-          }
-          break;
-        }
-        const expectedLength = getExpectedResponseLength(buffer);
-        if (expectedLength === -1) {
-          buffer.shift();
-          continue;
-        }
-        if (buffer.length >= expectedLength) {
-          const frame = buffer.slice(0, expectedLength);
-          const validation = validateRTUFrame(frame);
-          if (isOk(validation)) {
-            cleanup();
-            resolve(createOk(new Uint8Array(frame)));
-            return;
-          } else {
-            buffer.shift();
-            continue;
-          }
-        }
-        break;
+  if (signal?.aborted) {
+    return createErr(
+      signal.reason instanceof Error ? signal.reason : new Error("Aborted"),
+    );
+  }
+  try {
+    transport.postMessage(requestFrame);
+  } catch (e) {
+    return createErr(e as Error);
+  }
+  const chunkStream = byteStreamFromTransport(transport, { signal });
+  try {
+    for await (const frame of rtuFrameStream(chunkStream, signal)) {
+      const unitId = frame[0];
+      const functionCode = frame[1];
+      const match =
+        unitId === expectedUnitId &&
+        (functionCode === expectedFunctionCode ||
+          (functionCode & 0x80 &&
+            (functionCode & 0x7f) === expectedFunctionCode));
+      if (!match) continue; // ignore unrelated frame
+      if (functionCode & 0x80) {
+        const errCode = frame[2];
+        return createErr(new ModbusExceptionError(errCode));
       }
-    };
-    const onError = (ev: Event) => {
-      cleanup();
-      const errorEvent = ev as CustomEvent<Error> & { error?: unknown };
-      const possible =
-        (errorEvent.detail as unknown) ??
-        (errorEvent as { error?: unknown }).error;
-      const sourceErr = possible || new Error("Unknown error");
-      resolve(
-        createErr(
-          sourceErr instanceof Error ? sourceErr : new Error(String(sourceErr)),
-        ),
-      );
-    };
-    const cleanup = () => {
-      transportRemove();
-      if (signal) signal.removeEventListener("abort", abortHandler);
-    };
-    const transportRemove = () => {
-      // removeEventListener 未実装のため AbortSignal で一括解除想定 → ここでは no-op
-    };
-    signal?.addEventListener("abort", abortHandler, { once: true });
-    transport.addEventListener("message", onMessage, { signal });
-    transport.addEventListener("error", onError, { signal });
-    try {
-      transport.postMessage(requestFrame);
-    } catch (error) {
-      cleanup();
-      resolve(createErr(error as Error));
+      return createOk(frame);
     }
-  });
+    // Distinguish abort-driven termination from natural end-of-stream
+    if (signal?.aborted) {
+      return createErr(
+        signal.reason instanceof Error ? signal.reason : new Error("Aborted"),
+      );
+    }
+    return createErr(new Error("Stream ended before frame complete"));
+  } catch (e) {
+    return createErr(e as Error);
+  }
 }

@@ -93,6 +93,8 @@ export class MockTransport implements IModbusTransport {
     }
 
     this._connected = false;
+    // Emit close event for listeners (byteStreamFromTransport relies on it)
+    this.dispatch("close");
   }
 
   /** Terminate the simulated connection (optionally delayed). */
@@ -149,6 +151,7 @@ export class MockTransport implements IModbusTransport {
   public simulateDisconnect(): void {
     if (this._connected) {
       this._connected = false;
+      this.dispatch("close");
     }
   }
 
