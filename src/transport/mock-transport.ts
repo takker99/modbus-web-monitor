@@ -8,23 +8,31 @@ import type {
   TransportState,
 } from "./transport.ts";
 
+/** Options controlling test / simulation behaviour of {@link MockTransport}. */
 export interface MockTransportOptions {
-  // Simulate connection delay (ms)
+  /** Artificial delay before a successful connect resolves (ms). */
   connectDelay?: number;
-  // Simulate disconnection delay (ms)
+  /** Artificial delay before disconnect completes (ms). */
   disconnectDelay?: number;
-  // Simulate send delay (ms)
+  /** Artificial delay applied to `postMessage` (ms). */
   sendDelay?: number;
-  // Should connection fail?
+  /** When true `connect()` will reject with `errorMessage`. */
   shouldFailConnect?: boolean;
-  // Should sending fail?
+  /** When true sending data triggers an error event & throws. */
   shouldFailSend?: boolean;
-  // Error message for failures
+  /** Error message used for simulated failures. */
   errorMessage?: string;
-  // Auto-response data for sent requests
+  /** Predefined auto response map keyed by CSV stringified request bytes. */
   autoResponses?: Map<string, Uint8Array>;
 }
 
+/**
+ * In‑memory transport used for unit tests and interactive demos.
+ *
+ * Provides deterministic control over timing, error injection and automatic
+ * responses so higher level protocol logic can be validated without actual
+ * serial hardware.
+ */
 export class MockTransport implements IModbusTransport {
   private _state: TransportState = "disconnected";
   private options: MockTransportOptions;
@@ -33,6 +41,11 @@ export class MockTransport implements IModbusTransport {
   // For testing: manually trigger events
   public sentData: Uint8Array[] = [];
 
+  /**
+   * Construct a new mock transport.
+   * @param config - Mock transport configuration (discriminator only).
+   * @param options - Optional behaviour overrides (delays, failures, etc.).
+   */
   constructor(
     public readonly config: MockTransportConfig,
     options: MockTransportOptions = {},
@@ -49,14 +62,17 @@ export class MockTransport implements IModbusTransport {
     };
   }
 
+  /** Current lifecycle state. */
   get state(): TransportState {
     return this._state;
   }
 
+  /** True while the mock is considered connected. */
   get connected(): boolean {
     return this._state === "connected";
   }
 
+  /** Establish a simulated connection (optionally delayed / failed). */
   async connect(): Promise<void> {
     if (this._state === "connected") {
       return;
@@ -79,6 +95,7 @@ export class MockTransport implements IModbusTransport {
     this.dispatch("open");
   }
 
+  /** Terminate the simulated connection (optionally delayed). */
   async disconnect(): Promise<void> {
     if (this._state === "disconnected") {
       return;
@@ -94,6 +111,10 @@ export class MockTransport implements IModbusTransport {
     this.dispatch("close");
   }
 
+  /**
+   * Send raw bytes through the mock. May trigger an auto response or a
+   * simulated failure depending on {@link MockTransportOptions}.
+   */
   postMessage(data: Uint8Array): void {
     if (this._state !== "connected") {
       throw new Error("Transport not connected");
@@ -124,17 +145,20 @@ export class MockTransport implements IModbusTransport {
   }
 
   // Testing utilities
+  /** Manually inject inbound data as if it was received from the peer. */
   public simulateData(data: Uint8Array): void {
     if (this._state === "connected") {
       this.dispatchMessage(data);
     }
   }
 
+  /** Simulate a transport level error (transitions to `error` state). */
   public simulateError(error: Error): void {
     this.setState("error");
     this.dispatchError(error);
   }
 
+  /** Simulate an abrupt disconnect (fires `close`). */
   public simulateDisconnect(): void {
     if (this._state === "connected") {
       this.setState("disconnected");
@@ -142,19 +166,26 @@ export class MockTransport implements IModbusTransport {
     }
   }
 
+  /** Clear all recorded outbound frames. */
   public clearSentData(): void {
     this.sentData = [];
   }
 
+  /** Returns the last recorded outbound frame (if any). */
   public getLastSentData(): Uint8Array | undefined {
     return this.sentData[this.sentData.length - 1];
   }
 
+  /** Count of frames sent since construction / last clear. */
   public getSentDataCount(): number {
     return this.sentData.length;
   }
 
   // Configure auto-responses for testing
+  /**
+   * Register an auto response which will be emitted shortly after a matching
+   * request is observed.
+   */
   public setAutoResponse(request: Uint8Array, response: Uint8Array): void {
     const dataKey = Array.from(request).join(",");
     if (!this.options.autoResponses) {
@@ -163,6 +194,7 @@ export class MockTransport implements IModbusTransport {
     this.options.autoResponses.set(dataKey, response);
   }
 
+  /** Remove all previously registered auto responses. */
   public clearAutoResponses(): void {
     this.options.autoResponses?.clear();
   }

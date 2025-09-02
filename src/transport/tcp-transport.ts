@@ -11,6 +11,7 @@ import type {
   TransportState,
 } from "./transport.ts";
 
+/** Placeholder implementation for Modbus TCP (not usable in browsers). */
 export class TcpTransport implements IModbusTransport {
   private _state: TransportState = "disconnected";
   private socket: WebSocket | null = null;
@@ -29,6 +30,7 @@ export class TcpTransport implements IModbusTransport {
   /**
    * Establish a TCP (or placeholder) connection. Throws on browsers.
    */
+  /** Attempt to establish a TCP connection (always fails in browsers). */
   async connect(): Promise<void> {
     if (this._state === "connected") {
       return;
@@ -48,6 +50,7 @@ export class TcpTransport implements IModbusTransport {
     }
   }
 
+  /** Close the (placeholder) socket if present. */
   async disconnect(): Promise<void> {
     if (this._state === "disconnected") {
       return;
@@ -66,6 +69,7 @@ export class TcpTransport implements IModbusTransport {
     }
   }
 
+  /** Send raw bytes over the (unsupported) TCP channel. */
   postMessage(data: Uint8Array): void {
     if (this._state !== "connected") {
       throw new Error("Transport not connected");

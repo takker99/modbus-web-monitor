@@ -24,6 +24,7 @@ import type {
 } from "./modbus.ts";
 import type { IModbusTransport } from "./transport/transport.ts";
 
+/** Read coil status bits (FC01) using RTU protocol. */
 export async function readCoils(
   transport: IModbusTransport,
   slaveId: number,
@@ -37,6 +38,7 @@ export async function readCoils(
     options,
   );
 }
+/** Read discrete input status bits (FC02) using RTU protocol. */
 export async function readDiscreteInputs(
   transport: IModbusTransport,
   slaveId: number,
@@ -50,6 +52,7 @@ export async function readDiscreteInputs(
     options,
   );
 }
+/** Read holding registers (FC03) using RTU protocol. */
 export async function readHoldingRegisters(
   transport: IModbusTransport,
   slaveId: number,
@@ -63,6 +66,7 @@ export async function readHoldingRegisters(
     options,
   );
 }
+/** Read input registers (FC04) using RTU protocol. */
 export async function readInputRegisters(
   transport: IModbusTransport,
   slaveId: number,
@@ -77,6 +81,7 @@ export async function readInputRegisters(
   );
 }
 
+/** Write a single coil (FC05) using RTU protocol. */
 export async function writeSingleCoil(
   transport: IModbusTransport,
   slaveId: number,
@@ -90,6 +95,7 @@ export async function writeSingleCoil(
     options,
   );
 }
+/** Write a single register (FC06) using RTU protocol. */
 export async function writeSingleRegister(
   transport: IModbusTransport,
   slaveId: number,
@@ -103,6 +109,7 @@ export async function writeSingleRegister(
     options,
   );
 }
+/** Write multiple coils (FC15) using RTU protocol. */
 export async function writeMultipleCoils(
   transport: IModbusTransport,
   slaveId: number,
@@ -121,6 +128,7 @@ export async function writeMultipleCoils(
     options,
   );
 }
+/** Write multiple registers (FC16) using RTU protocol. */
 export async function writeMultipleRegisters(
   transport: IModbusTransport,
   slaveId: number,
@@ -135,6 +143,7 @@ export async function writeMultipleRegisters(
   );
 }
 
+/** Low-level generic read helper shared by exported RTU read functions. */
 export async function read(
   transport: IModbusTransport,
   request: ReadRequest,
@@ -174,6 +183,7 @@ export async function read(
   }
 }
 
+/** Low-level generic write helper shared by exported RTU write functions. */
 export async function write(
   transport: IModbusTransport,
   request: WriteRequest,
@@ -197,6 +207,10 @@ export async function write(
   }
 }
 
+/**
+ * Core RTU request/response exchange helper.
+ * Performs resynchronisation scanning, CRC validation and exception mapping.
+ */
 async function send(
   transport: IModbusTransport,
   requestFrame: Uint8Array,

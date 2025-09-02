@@ -24,6 +24,7 @@ import type {
 } from "./modbus.ts";
 import type { IModbusTransport } from "./transport/transport.ts";
 
+/** Read coil status bits (FC01) using ASCII protocol. */
 export async function readCoils(
   transport: IModbusTransport,
   slaveId: number,
@@ -37,6 +38,7 @@ export async function readCoils(
     options,
   );
 }
+/** Read discrete input status bits (FC02) using ASCII protocol. */
 export async function readDiscreteInputs(
   transport: IModbusTransport,
   slaveId: number,
@@ -50,6 +52,7 @@ export async function readDiscreteInputs(
     options,
   );
 }
+/** Read holding registers (FC03) using ASCII protocol. */
 export async function readHoldingRegisters(
   transport: IModbusTransport,
   slaveId: number,
@@ -63,6 +66,7 @@ export async function readHoldingRegisters(
     options,
   );
 }
+/** Read input registers (FC04) using ASCII protocol. */
 export async function readInputRegisters(
   transport: IModbusTransport,
   slaveId: number,
@@ -77,6 +81,7 @@ export async function readInputRegisters(
   );
 }
 
+/** Write a single coil (FC05) using ASCII protocol. */
 export async function writeSingleCoil(
   transport: IModbusTransport,
   slaveId: number,
@@ -90,6 +95,7 @@ export async function writeSingleCoil(
     options,
   );
 }
+/** Write a single register (FC06) using ASCII protocol. */
 export async function writeSingleRegister(
   transport: IModbusTransport,
   slaveId: number,
@@ -103,6 +109,7 @@ export async function writeSingleRegister(
     options,
   );
 }
+/** Write multiple coils (FC15) using ASCII protocol. */
 export async function writeMultipleCoils(
   transport: IModbusTransport,
   slaveId: number,
@@ -121,6 +128,7 @@ export async function writeMultipleCoils(
     options,
   );
 }
+/** Write multiple registers (FC16) using ASCII protocol. */
 export async function writeMultipleRegisters(
   transport: IModbusTransport,
   slaveId: number,
@@ -135,6 +143,7 @@ export async function writeMultipleRegisters(
   );
 }
 
+/** Low-level generic read helper shared by exported ASCII read functions. */
 export async function read(
   transport: IModbusTransport,
   request: ReadRequest,
@@ -176,6 +185,7 @@ export async function read(
   }
 }
 
+/** Low-level generic write helper shared by exported ASCII write functions. */
 export async function write(
   transport: IModbusTransport,
   request: WriteRequest,
@@ -199,6 +209,11 @@ export async function write(
   }
 }
 
+/**
+ * Core ASCII request/response exchange helper.
+ * Handles streaming accumulation, frame boundary detection, LRC validation
+ * and exception frame mapping.
+ */
 async function send(
   transport: IModbusTransport,
   requestFrame: Uint8Array,

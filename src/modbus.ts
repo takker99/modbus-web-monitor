@@ -16,6 +16,7 @@ export interface ModbusResponse {
   timestamp: Date;
 }
 
+/** Configuration object for a Modbus read (FC01-04) request. */
 export interface ReadRequest {
   slaveId: number;
   functionCode: ReadFunctionCode;
@@ -23,6 +24,7 @@ export interface ReadRequest {
   quantity: number;
 }
 
+/** Configuration object for a Modbus write (FC05/06/15/16) request. */
 export interface WriteRequest {
   slaveId: number;
   functionCode: WriteFunctionCode;
@@ -30,6 +32,7 @@ export interface WriteRequest {
   value: number | number[];
 }
 
+/** Optional per-request controls (AbortSignal etc.). */
 export interface RequestOptions {
   signal?: AbortSignal;
 }

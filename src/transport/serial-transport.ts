@@ -13,6 +13,14 @@ import type {
  * Serial transport implementation using Web Serial API.
  * Wraps the existing SerialManager to implement the IModbusTransport interface.
  */
+/**
+ * Concrete transport backed by the Web Serial API.
+ *
+ * Responsibilities:
+ * - Port selection delegation to {@link SerialManager}
+ * - Propagating SerialManager events as transport events
+ * - Minimal state machine bridging imperative connect/disconnect lifecycle
+ */
 export class SerialTransport implements IModbusTransport {
   #serialManager: SerialManager;
   #state: TransportState = "disconnected";
@@ -44,6 +52,7 @@ export class SerialTransport implements IModbusTransport {
     return this.#state === "connected";
   }
 
+  /** Open (or re-open) the underlying serial port. Idempotent. */
   async connect(): Promise<void> {
     if (this.#state === "connected") {
       return;
@@ -71,6 +80,7 @@ export class SerialTransport implements IModbusTransport {
     }
   }
 
+  /** Close the underlying port if open. Safe to call repeatedly. */
   async disconnect(): Promise<void> {
     if (this.#state === "disconnected") {
       return;
@@ -85,6 +95,12 @@ export class SerialTransport implements IModbusTransport {
     }
   }
 
+  /**
+   * Send raw bytes to the serial device.
+   *
+   * Errors encountered during the async write are surfaced via an `error`
+   * event (fire-and-forget semantics by design for parity with MessagePort).
+   */
   postMessage(data: Uint8Array): void {
     if (this.#state !== "connected") {
       throw new Error("Transport not connected");

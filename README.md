@@ -1,8 +1,8 @@
 # Modbus Web Monitor
 
-Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Serial API and Preact. It lets you connect to a serial Modbus device directly from Chrome (or any Chromium browser supporting Web Serial), send read/write requests, monitor periodic polling, and inspect raw frames.
+[![codecov](https://codecov.io/gh/takker99/modbus-web-monitor/branch/main/graph/badge.svg)](https://codecov.io/gh/takker99/modbus-web-monitor)
 
-> This tool was originally prototyped in Japanese; all UI and source comments have been translated to English.
+Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Serial API and Preact. It lets you connect to a serial Modbus device directly from Chrome (or any Chromium browser supporting Web Serial), send read/write requests, monitor periodic polling, and inspect raw frames.
 
 ## Features
 
@@ -17,28 +17,6 @@ Web-based Modbus RTU / ASCII inspector (monitor & tester) powered by the Web Ser
 - Simple buffering & response correlation (caller-controlled cancellation via AbortSignal)
 - Clean, responsive UI (desktop & mobile)
 
-## Coverage
-
-Code coverage reports are automatically generated and uploaded for each CI run. The project maintains comprehensive test coverage for core Modbus protocol functionality.
-
-[![codecov](https://codecov.io/gh/takker99/modbus-web-monitor/branch/main/graph/badge.svg)](https://codecov.io/gh/takker99/modbus-web-monitor)
-
-### Running Coverage Locally
-
-```bash
-# Generate coverage report
-pnpm test:coverage
-
-# View HTML report
-open coverage/index.html
-```
-
-Coverage reports include:
-- Line, branch, and function coverage metrics
-- Detailed per-file coverage analysis
-- HTML report with uncovered line highlighting
-- LCOV format for CI integration
-
 ## Roadmap Ideas (Not yet implemented)
 
 - Saving / loading session profiles
@@ -50,13 +28,147 @@ Coverage reports include:
 
 | Layer | File(s) | Responsibility |
 |-------|---------|---------------|
-| UI (React-like) | `src/App.tsx` | Preact component implementation of the full UI (current active path) |
-| Legacy DOM UI (non-Preact) | `src/ui.ts` + `src/main.ts` | Earlier vanilla DOM event driven UI (still present; not used when using `main.tsx`) |
-| Modbus protocol | `src/modbus.ts` | Building requests, parsing RTU/ASCII responses, CRC/LRC validation, monitoring loop |
-| Serial abstraction | `src/serial.ts` | Web Serial API wrapper + event emitter |
-| Types | `src/types.ts` | Shared TypeScript interfaces |
+| UI (Preact) | `src/frontend/App.tsx` | Component implementation of the full UI |
+| Pure Modbus API | `src/rtu.ts`, `src/ascii.ts`, `src/frameBuilder.ts`, `src/frameParser.ts` | Pure, side‑effect free request frame build + parse functions (RTU & ASCII) |
+| Transport abstraction | `src/transport/*` | Swappable transports (Serial / Mock / TCP placeholder) implementing a minimal event API |
+| Low-level serial wrapper | `src/serial.ts` | Web Serial API wrapper + typed EventEmitter |
+| Errors & helpers | `src/errors.ts`, `src/functionCodes.ts`, `src/crc.ts`, `src/lrc.ts` | Shared utilities / error types |
 
-The Preact entry point is `index.html` -> `src/main.tsx` -> `App`.
+Entry point: `index.html` -> `src/frontend/main.tsx` -> `App`.
+
+Legacy class-based Modbus client code has been replaced by a transport + pure function API (see below). The previous class facade is intentionally omitted for a smaller surface and easier testing.
+
+## Transport Abstraction
+
+The transport layer provides a unified, MessagePort-like interface for different communication backends.
+
+### Built-in Transports
+
+- `SerialTransport` – Web Serial API
+- `MockTransport` – Deterministic test / development transport (auto responses, error injection)
+- `TcpTransport` – Placeholder (throws in browsers; add a WebSocket bridge instead)
+
+You can create transports directly or via the registry helper.
+
+```ts
+import { createTransport, SerialTransport } from "./src/transport";
+import type { SerialTransportConfig } from "./src/transport";
+
+const cfg: SerialTransportConfig = {
+  type: "serial",
+  baudRate: 9600,
+  dataBits: 8,
+  parity: "none",
+  stopBits: 1,
+};
+
+// Using helper
+const transport = createTransport(cfg);
+await transport.connect();
+
+transport.addEventListener("message", (ev) => {
+  console.log("RX", Array.from(ev.detail));
+});
+
+// Raw write (already framed Modbus RTU/ASCII bytes)
+transport.postMessage(new Uint8Array([1,3,0,0,0,1,0x84,0x0A]));
+```
+
+### Mock Transport Example
+
+```ts
+import { MockTransport, type MockTransportConfig } from "./src/transport";
+
+const mockCfg: MockTransportConfig = { type: "mock", name: "demo" };
+const mock = new MockTransport(mockCfg, { connectDelay: 50 });
+await mock.connect();
+
+// Auto response: when request bytes match, reply automatically
+const request = new Uint8Array([1,3,0,0,0,1]);
+const response = new Uint8Array([1,3,2,0x12,0x34]);
+mock.setAutoResponse(request, response);
+
+mock.addEventListener("message", (ev) => {
+  console.log("Mock RX", ev.detail);
+});
+
+mock.postMessage(request); // Will trigger response shortly
+```
+
+### Transport Events
+
+| Event | Detail | When |
+|-------|--------|------|
+| `open` | - | Successful connect |
+| `close` | - | Graceful or unexpected disconnect |
+| `statechange` | `TransportState` | Any state transition |
+| `message` | `Uint8Array` | Raw received frame bytes |
+| `error` | `Error` | Transport-level error |
+
+## Pure Function Modbus API
+
+High-level Modbus operations are exposed as pure async functions operating on an `IModbusTransport` instance. They return `Result<T, Error>` objects (from `option-t/plain_result`) instead of throwing for predictable error handling.
+
+Two protocol modules exist: `rtu.ts` and `ascii.ts` (function names are the same).
+
+### Reading
+
+```ts
+import { readHoldingRegisters } from "./src/rtu"; // or "./src/ascii"
+import { isOk } from "option-t/plain_result";
+
+const res = await readHoldingRegisters(transport, 1, 0, 10);
+if (isOk(res)) {
+  console.log("Registers", res.ok.data);
+}
+```
+
+### Writing
+
+```ts
+import { writeSingleRegister, writeMultipleRegisters } from "./src/rtu";
+import { isErr } from "option-t/plain_result";
+
+const r1 = await writeSingleRegister(transport, 1, 100, 0x1234);
+const r2 = await writeMultipleRegisters(transport, 1, 0, [0x1234, 0x5678]);
+for (const r of [r1, r2]) if (isErr(r)) console.error(r.err.message);
+```
+
+### Abort / Cancellation
+
+Each read/write accepts `{ signal?: AbortSignal }` in the final options parameter. Provide an `AbortController` to enforce timeouts.
+
+```ts
+const controller = new AbortController();
+setTimeout(() => controller.abort(new Error("Timeout")), 1500);
+const result = await readCoils(transport, 1, 0, 16, { signal: controller.signal });
+```
+
+### Result Helpers
+
+The project uses the functional Result type from `option-t`:
+
+| Helper | Purpose |
+|--------|---------|
+| `createOk(data)` | Construct success result |
+| `createErr(error)` | Construct error result |
+| `isOk(r)` / `isErr(r)` | Type guards |
+| `unwrapOk(r)` | Extract value (assumes Ok) |
+
+### Why Result Instead of Exceptions?
+
+- Avoids try/catch in hot paths
+- Composable transformations / branching
+- Easier test assertions (no thrown side effects)
+
+## Benefits Summary
+
+| Aspect | Transport Abstraction | Pure Function API |
+|--------|-----------------------|-------------------|
+| Testability | Mock transport, deterministic timing | No hidden state, simple inputs/outputs |
+| Extensibility | Register new transports dynamically | Compose new higher operations easily |
+| Error Handling | Structured events & explicit states | Explicit `Result` objects |
+| Tree Shaking | Import only needed transports | Import only used operations |
 
 ## Function Code Type Safety
 
@@ -239,26 +351,7 @@ The ASCII implementation handles:
 
 ## Error / Exception Handling & Cancellation
 
-- Pending request queue: only one outstanding at a time; attempts while busy reject.
-- No built-in timeout: callers decide cancellation policy (UI or integrations use AbortController).
-- Abort with `AbortController` (`client.read(cfg, { signal })`) to cancel an in‑flight request.
-- On Modbus exception (function | 0x80), the code is mapped and surfaced in logs.
-- CRC / LRC mismatch triggers an error and buffer reset (RTU attempts limited resync; ASCII clears buffer).
-
-### Example: Manual Timeout Using AbortController
-
-```ts
-const controller = new AbortController();
-const timer = setTimeout(() => controller.abort(new Error("Aborted")), 1500);
-try {
-  const res = await client.read({ slaveId:1, functionCode:3, startAddress:0, quantity:10 }, { signal: controller.signal });
-  console.log(res.data);
-} catch (e) {
-  console.error("Read aborted:", (e as Error).message);
-} finally {
-  clearTimeout(timer);
-}
-```
+Pure functions perform a single in-flight request per call; concurrency control is handled by the caller (UI serialises by design). Provide an `AbortSignal` for timeouts. Modbus exception frames (function code | 0x80) become `ModbusExceptionError`. Corrupted frames trigger CRC / LRC specific errors; RTU logic attempts resync scanning for plausible frame starts before discarding.
 
 ## Troubleshooting
 
@@ -431,7 +524,7 @@ pnpm test test/modbus.test.ts
 - **ASCII and RTU protocol coverage** including error paths
 - **Race condition prevention** testing for concurrent requests
 
-The test suite validates that the Modbus implementation handles malformed frames gracefully without crashes and properly manages external abort-driven cancellations and overlapping requests.
+The test suite validates the pure function + transport integration: malformed frames, resynchronisation, abort-driven cancellations and overlapping request prevention in higher layers.
 
 The project includes a comprehensive CI pipeline that:
 - Tests across Node.js versions 18, 20, and 22
