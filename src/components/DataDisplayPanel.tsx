@@ -1,6 +1,6 @@
 import type { FunctionalComponent } from "preact";
 import { FUNCTION_CODE_LABELS } from "../functionCodes.ts";
-import type { ModbusResponse } from "../modbus-base.ts";
+import type { ModbusResponse } from "../types/modbus.ts";
 
 interface Props {
   data: ModbusResponse[];

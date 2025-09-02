@@ -7,7 +7,7 @@
 
 import { calculateCRC16 } from "./crc.ts";
 import { calculateLRC } from "./lrc.ts";
-import type { ModbusReadConfig, ModbusWriteConfig } from "./modbus.ts";
+import type { ModbusReadConfig, ModbusWriteConfig } from "./types/modbus.ts";
 
 /**
  * Supported Modbus transport protocols used by the frame builders.

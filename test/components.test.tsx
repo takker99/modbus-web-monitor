@@ -8,8 +8,8 @@ import { PortDisconnectedBanner } from "../src/components/PortDisconnectedBanner
 import { ReadPanel } from "../src/components/ReadPanel.tsx";
 import { SerialManagerTransport } from "../src/components/SerialManagerTransport.ts";
 import { WritePanel } from "../src/components/WritePanel.tsx";
-import type { ModbusResponse } from "../src/modbus-base.ts";
 import { SerialManager } from "../src/serial.ts";
+import type { ModbusResponse } from "../src/types/modbus.ts";
 
 // Mocks
 class DummySerialManager extends SerialManager {

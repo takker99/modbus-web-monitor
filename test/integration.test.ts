@@ -2,7 +2,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { readHoldingRegisters, writeSingleRegister } from "../src/api/rtu.ts";
 import { calculateCRC16 } from "../src/crc.ts";
-import { ModbusClient } from "../src/modbus.ts";
 import {
   MockTransport,
   type MockTransportConfig,
@@ -11,7 +10,6 @@ import { isErr, isOk, map, unwrapOr } from "../src/types/result.ts";
 
 describe("API Integration", () => {
   let transport: MockTransport;
-  let client: ModbusClient;
 
   beforeEach(async () => {
     // Set up mock transport
@@ -24,10 +22,6 @@ describe("API Integration", () => {
     await transport.connect();
     transport.clearSentData();
     transport.clearAutoResponses();
-
-    // Set up class-based client
-    client = new ModbusClient();
-    client.protocol = "rtu";
   });
 
   it("should work with both APIs simultaneously", async () => {

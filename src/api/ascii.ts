@@ -8,8 +8,8 @@ import {
   validateASCIIFrame,
 } from "../frameParser.ts";
 import { FUNCTION_CODE_LABELS, isValidFunctionCode } from "../functionCodes.ts";
-import type { ModbusResponse } from "../modbus-base.ts";
 import type { IModbusTransport } from "../transport/transport.ts";
+import type { ModbusResponse } from "../types/modbus.ts";
 import type { Result } from "../types/result.ts";
 import { err, ok } from "../types/result.ts";
 

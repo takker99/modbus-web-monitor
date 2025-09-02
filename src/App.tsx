@@ -30,10 +30,10 @@ import type { WriteFunctionCode } from "./functionCodes.ts";
 import { useLogs } from "./hooks/useLogs.ts";
 import { usePolling } from "./hooks/usePolling.ts";
 import { useSerial } from "./hooks/useSerial.ts";
-import type { ModbusResponse } from "./modbus-base.ts";
 import type { SerialConfig, SerialManager } from "./serial.ts";
 // --- SerialManager を IModbusTransport へアダプト ---
 import type { IModbusTransport } from "./transport/transport.ts";
+import type { ModbusResponse } from "./types/modbus.ts";
 import { isOk, type Result } from "./types/result.ts";
 import {
   parseCoilValues,

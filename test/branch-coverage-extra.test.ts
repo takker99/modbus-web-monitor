@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calculateCRC16 } from "../src/crc.ts";
 import { parseRTUFrame, validateRTUFrame } from "../src/frameParser.ts";
-import { ModbusASCIIClient } from "../src/modbus-ascii.ts";
-import type { ModbusReadConfig } from "../src/modbus-base.ts";
 import { MockTransport } from "../src/transport/mock-transport.ts";
 import { TransportRegistry } from "../src/transport/transport.ts";
 
@@ -66,67 +64,4 @@ describe("validateRTUFrame error variants", () => {
     const r = validateRTUFrame(full);
     expect(r.isValid).toBe(false);
   });
-});
-
-// ASCII client edge branches
-describe("ModbusASCIIClient parse edge branches", () => {
-  const readCfg: ModbusReadConfig = {
-    functionCode: 3,
-    quantity: 1,
-    slaveId: 1,
-    startAddress: 0,
-  };
-  function createClient() {
-    return new ModbusASCIIClient();
-  }
-
-  it("odd hex length error", async () => {
-    const c = createClient();
-    const p = c.read(readCfg).catch((e) => e);
-    // feed partial frame with odd length after ':'
-    c.handleResponse(
-      new Uint8Array(Array.from(":0103F\r\n").map((ch) => ch.charCodeAt(0))),
-    );
-    const err = await p;
-    expect(err).toBeInstanceOf(Error);
-  });
-
-  it("invalid hex pair error", async () => {
-    const c = createClient();
-    const p = c.read(readCfg).catch((e) => e);
-    // Provide CRLF termination to trigger processing
-    c.handleResponse(
-      new Uint8Array(
-        Array.from(":0103ZZ\r\n".split("").map((ch) => ch.charCodeAt(0))),
-      ),
-    );
-    const err = await p;
-    expect(err).toBeInstanceOf(Error);
-  });
-
-  it("LRC mismatch", async () => {
-    const c = createClient();
-    const p = c.read(readCfg).catch((e) => e);
-    // Valid minimal FC3 response would be :0103 02 0001 LRC . Here intentionally wrong LRC 00
-    const frame = ":010302000100"; // last 00 is wrong LRC
-    c.handleResponse(
-      new Uint8Array(Array.from(`${frame}\r\n`).map((ch) => ch.charCodeAt(0))),
-    );
-    const err = await p;
-    expect(err).toBeInstanceOf(Error);
-  });
-
-  it("exception frame too short", async () => {
-    const c = createClient();
-    const p = c.read(readCfg).catch((e) => e);
-    // Exception fc (0x83) but missing exception code and LRC is forced to match structure
-    const bad = ":0183"; // incomplete
-    c.handleResponse(
-      new Uint8Array(Array.from(`${bad}\r\n`).map((ch) => ch.charCodeAt(0))),
-    );
-    const err = await p;
-    expect(err).toBeInstanceOf(Error);
-  });
-
-  // Internal timeout logic removed; read now relies on external AbortSignal, so no internal timeout test here.
 });

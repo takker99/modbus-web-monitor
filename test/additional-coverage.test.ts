@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { ModbusExceptionError } from "../src/errors.ts";
 import { buildWriteRequest } from "../src/frameBuilder.ts";
-import type { ModbusWriteConfig } from "../src/modbus.ts";
 import { SerialManager } from "../src/serial.ts";
+import type { ModbusWriteConfig } from "../src/types/modbus.ts";
 
 // Helper to build a minimal write config
 function writeCfg(overrides: Partial<ModbusWriteConfig>): ModbusWriteConfig {
