@@ -1,5 +1,5 @@
 import type { FunctionalComponent } from "preact";
-import type { WriteFunctionCode } from "../functionCodes.ts";
+import type { WriteFunctionCode } from "../../functionCodes.ts";
 
 interface WriteConfigUI {
   address: number;

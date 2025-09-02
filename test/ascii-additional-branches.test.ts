@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readHoldingRegisters } from "../src/api/ascii.ts";
+import { readHoldingRegisters } from "../src/ascii.ts";
 import { ModbusExceptionError } from "../src/errors.ts";
 import { MockTransport } from "../src/transport/mock-transport.ts";
 

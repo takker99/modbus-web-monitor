@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import * as ascii from "../src/api/ascii.ts";
+import * as ascii from "../src/ascii.ts";
 import { ModbusExceptionError } from "../src/errors.ts";
 import { buildReadRequest, buildWriteRequest } from "../src/frameBuilder.ts";
 import { calculateLRC } from "../src/lrc.ts";

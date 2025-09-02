@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { type SerialConfig, SerialManager } from "../serial.ts";
+import { type SerialConfig, SerialManager } from "../../serial.ts";
 
 // For test/mocking we expose the shape required; a mock can implement these members.
 export interface SerialManagerLike {

@@ -1,6 +1,8 @@
 // Tests for pure function API
 import { beforeEach, describe, expect, it } from "vitest";
-import { readHoldingRegisters as readHoldingRegistersASCII } from "../src/api/ascii.ts";
+import { readHoldingRegisters as readHoldingRegistersASCII } from "../src/ascii.ts";
+import { calculateCRC16 } from "../src/crc.ts";
+import { isErr, isOk } from "../src/result.ts";
 import {
   readCoils,
   readDiscreteInputs,
@@ -10,13 +12,11 @@ import {
   writeMultipleRegisters,
   writeSingleCoil,
   writeSingleRegister,
-} from "../src/api/rtu.ts";
-import { calculateCRC16 } from "../src/crc.ts";
+} from "../src/rtu.ts";
 import {
   MockTransport,
   type MockTransportConfig,
 } from "../src/transport/index.ts";
-import { isErr, isOk } from "../src/types/result.ts";
 
 describe("Pure Function API", () => {
   let transport: MockTransport;

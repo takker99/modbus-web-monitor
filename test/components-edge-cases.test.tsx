@@ -2,8 +2,8 @@
 
 import { render, screen } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
-import { SerialManagerTransport } from "../src/components/SerialManagerTransport.ts";
-import { WritePanel } from "../src/components/WritePanel.tsx";
+import { WritePanel } from "../src/frontend/components/WritePanel.tsx";
+import { SerialManagerTransport } from "../src/frontend/SerialManagerTransport.ts";
 
 // Focus: cover WritePanel disabled logic branches & SerialManagerTransport error listener abort branch
 

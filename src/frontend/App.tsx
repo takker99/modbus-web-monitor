@@ -8,7 +8,11 @@ import {
   writeMultipleRegisters as asciiWriteMultipleRegisters,
   writeSingleCoil as asciiWriteSingleCoil,
   writeSingleRegister as asciiWriteSingleRegister,
-} from "./api/ascii.ts";
+} from "../ascii.ts";
+import type { ModbusProtocol } from "../frameBuilder.ts";
+import type { WriteFunctionCode } from "../functionCodes.ts";
+import type { ModbusResponse } from "../modbus.ts";
+import { isOk, type Result } from "../result.ts";
 import {
   readCoils as rtuReadCoils,
   readDiscreteInputs as rtuReadDiscreteInputs,
@@ -18,29 +22,25 @@ import {
   writeMultipleRegisters as rtuWriteMultipleRegisters,
   writeSingleCoil as rtuWriteSingleCoil,
   writeSingleRegister as rtuWriteSingleRegister,
-} from "./api/rtu.ts";
+} from "../rtu.ts";
+import type { SerialConfig, SerialManager } from "../serial.ts";
+// --- SerialManager を IModbusTransport へアダプト ---
+import type { IModbusTransport } from "../transport/transport.ts";
 import { ConnectionSettingsPanel } from "./components/ConnectionSettingsPanel.tsx";
 import { DataDisplayPanel } from "./components/DataDisplayPanel.tsx";
 import { PortDisconnectedBanner } from "./components/PortDisconnectedBanner.tsx";
 import { ReadPanel } from "./components/ReadPanel.tsx";
-import { SerialManagerTransport } from "./components/SerialManagerTransport.ts";
 import { WritePanel } from "./components/WritePanel.tsx";
-import type { ModbusProtocol } from "./frameBuilder.ts";
-import type { WriteFunctionCode } from "./functionCodes.ts";
 import { useLogs } from "./hooks/useLogs.ts";
 import { usePolling } from "./hooks/usePolling.ts";
 import { useSerial } from "./hooks/useSerial.ts";
-import type { SerialConfig, SerialManager } from "./serial.ts";
-// --- SerialManager を IModbusTransport へアダプト ---
-import type { IModbusTransport } from "./transport/transport.ts";
-import type { ModbusResponse } from "./types/modbus.ts";
-import { isOk, type Result } from "./types/result.ts";
 import {
   parseCoilValues,
   parseRegisterValues,
   formatAddress as utilFormatAddress,
   formatValue as utilFormatValue,
-} from "./utils/modbusUtils.ts";
+} from "./modbusUtils.ts";
+import { SerialManagerTransport } from "./SerialManagerTransport.ts";
 
 // Extended interface for the UI state (includes additional fields for multi-value input)
 interface ModbusWriteUIConfig {

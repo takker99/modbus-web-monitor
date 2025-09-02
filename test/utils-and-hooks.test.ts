@@ -1,14 +1,17 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useLogs } from "../src/hooks/useLogs.ts";
-import { usePolling } from "../src/hooks/usePolling.ts";
-import { type SerialManagerLike, useSerial } from "../src/hooks/useSerial.ts";
+import { useLogs } from "../src/frontend/hooks/useLogs.ts";
+import { usePolling } from "../src/frontend/hooks/usePolling.ts";
+import {
+  type SerialManagerLike,
+  useSerial,
+} from "../src/frontend/hooks/useSerial.ts";
 import {
   formatAddress,
   formatValue,
   parseCoilValues,
   parseRegisterValues,
-} from "../src/utils/modbusUtils.ts";
+} from "../src/frontend/modbusUtils.ts";
 import { act, renderHook } from "./vitest-render-hook";
 
 // --- Pure utilities ---

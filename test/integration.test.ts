@@ -1,12 +1,12 @@
 // Integration tests showing both class-based and pure function APIs working together
 import { beforeEach, describe, expect, it } from "vitest";
-import { readHoldingRegisters, writeSingleRegister } from "../src/api/rtu.ts";
 import { calculateCRC16 } from "../src/crc.ts";
+import { isErr, isOk, map, unwrapOr } from "../src/result.ts";
+import { readHoldingRegisters, writeSingleRegister } from "../src/rtu.ts";
 import {
   MockTransport,
   type MockTransportConfig,
 } from "../src/transport/index.ts";
-import { isErr, isOk, map, unwrapOr } from "../src/types/result.ts";
 
 describe("API Integration", () => {
   let transport: MockTransport;

@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     coverage: {
       enabled: true,
-      exclude: ["src/App.tsx", "src/main.tsx"],
+      exclude: ["src/frontend/App.tsx", "src/frontend/main.tsx"],
       include: ["src/**"],
       provider: "v8",
       reporter: ["text", "text-summary", "html", "json", "lcov"],

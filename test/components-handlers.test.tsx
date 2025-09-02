@@ -2,10 +2,10 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ConnectionSettingsPanel } from "../src/components/ConnectionSettingsPanel.tsx";
-import { ReadPanel } from "../src/components/ReadPanel.tsx";
-import { SerialManagerTransport } from "../src/components/SerialManagerTransport.ts";
-import { WritePanel } from "../src/components/WritePanel.tsx";
+import { ConnectionSettingsPanel } from "../src/frontend/components/ConnectionSettingsPanel.tsx";
+import { ReadPanel } from "../src/frontend/components/ReadPanel.tsx";
+import { WritePanel } from "../src/frontend/components/WritePanel.tsx";
+import { SerialManagerTransport } from "../src/frontend/SerialManagerTransport.ts";
 
 // simple stub for SerialManager
 class SM {

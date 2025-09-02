@@ -1,17 +1,17 @@
 // ASCII-specific pure function API extracted from pure-functions.ts
 // Provides a functional interface for Modbus ASCII without bundling RTU logic
-import { ModbusExceptionError } from "../errors.ts";
-import { buildReadRequest, buildWriteRequest } from "../frameBuilder.ts";
+import { ModbusExceptionError } from "./errors.ts";
+import { buildReadRequest, buildWriteRequest } from "./frameBuilder.ts";
 import {
   parseBitData,
   parseRegisterData,
   validateASCIIFrame,
-} from "../frameParser.ts";
-import { FUNCTION_CODE_LABELS, isValidFunctionCode } from "../functionCodes.ts";
-import type { IModbusTransport } from "../transport/transport.ts";
-import type { ModbusResponse } from "../types/modbus.ts";
-import type { Result } from "../types/result.ts";
-import { err, ok } from "../types/result.ts";
+} from "./frameParser.ts";
+import { FUNCTION_CODE_LABELS, isValidFunctionCode } from "./functionCodes.ts";
+import type { ModbusResponse } from "./modbus.ts";
+import type { Result } from "./result.ts";
+import { err, ok } from "./result.ts";
+import type { IModbusTransport } from "./transport/transport.ts";
 
 export interface ReadRequest {
   unitId: number;

@@ -2,7 +2,7 @@
 
 import { fireEvent, render, screen } from "@testing-library/preact";
 import { describe, expect, it, vi } from "vitest";
-import { WritePanel } from "../src/components/WritePanel.tsx";
+import { WritePanel } from "../src/frontend/components/WritePanel.tsx";
 
 describe("WritePanel additional branches", () => {
   it("shows non-hex placeholder when hexDisplay=false for FC16", () => {

@@ -15,7 +15,7 @@ import {
   toPromise,
   unwrap,
   unwrapOr,
-} from "../src/types/result.ts";
+} from "../src/result.ts";
 
 describe("Result Type", () => {
   describe("Constructors", () => {

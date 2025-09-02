@@ -1,5 +1,5 @@
 import { useCallback, useState } from "preact/hooks";
-import type { LogEntry } from "../utils/modbusUtils.ts";
+import type { LogEntry } from "../modbusUtils.ts";
 
 export interface UseLogsOptions {
   now?: () => Date; // DI for testing

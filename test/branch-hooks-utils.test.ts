@@ -2,15 +2,15 @@
 
 import { act } from "preact/test-utils";
 import { describe, expect, it, vi } from "vitest";
-import { useLogs } from "../src/hooks/useLogs.ts";
-import { usePolling } from "../src/hooks/usePolling.ts";
-import { useSerial } from "../src/hooks/useSerial.ts";
+import { useLogs } from "../src/frontend/hooks/useLogs.ts";
+import { usePolling } from "../src/frontend/hooks/usePolling.ts";
+import { useSerial } from "../src/frontend/hooks/useSerial.ts";
 import {
   formatAddress,
   formatValue,
   parseCoilValues,
   parseRegisterValues,
-} from "../src/utils/modbusUtils.ts";
+} from "../src/frontend/modbusUtils.ts";
 import { renderHook } from "./vitest-render-hook";
 
 // Edge case helpers for modbusUtils

@@ -1,6 +1,6 @@
 import type { FunctionalComponent } from "preact";
-import type { ModbusProtocol } from "../frameBuilder.ts";
-import type { SerialConfig } from "../serial.ts";
+import type { ModbusProtocol } from "../../frameBuilder.ts";
+import type { SerialConfig } from "../../serial.ts";
 
 interface Props {
   serialConfig: SerialConfig;

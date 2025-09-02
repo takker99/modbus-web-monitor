@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { ModbusExceptionError } from "../src/errors.ts";
 import { buildWriteRequest } from "../src/frameBuilder.ts";
+import type { ModbusWriteConfig } from "../src/modbus.ts";
 import { SerialManager } from "../src/serial.ts";
-import type { ModbusWriteConfig } from "../src/types/modbus.ts";
 
 // Helper to build a minimal write config
 function writeCfg(overrides: Partial<ModbusWriteConfig>): ModbusWriteConfig {
@@ -136,7 +136,7 @@ describe("SerialManager negative paths", () => {
   });
 });
 
-import { readHoldingRegisters as readHoldingRegistersRTU } from "../src/api/rtu.ts";
+import { readHoldingRegisters as readHoldingRegistersRTU } from "../src/rtu.ts";
 // Extra abort pre-check coverage for pure function APIs
 import { MockTransport } from "../src/transport/mock-transport.ts";
 
@@ -150,7 +150,7 @@ describe("Abort pre-check coverage", () => {
     const rtuResult = await readHoldingRegistersRTU(transport, 1, 0, 1, {
       signal: c.signal,
     });
-    const asciiModule = await import("../src/api/ascii.ts");
+    const asciiModule = await import("../src/ascii.ts");
     const asciiResult = await asciiModule.readHoldingRegisters(
       transport,
       1,
