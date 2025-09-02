@@ -483,54 +483,58 @@ This application provides full support for standard Modbus read and write operat
 
 ## Testing
 
-This project has comprehensive test coverage for the Modbus protocol implementation with focus on reliability and edge case handling.
+Tests are colocated with their source: every `*.ts` / `*.tsx` may have a sibling `*.test.ts` / `*.test.tsx`. Only true cross‑module integration or fuzz/resync scenarios live under `src/__tests__/`.
 
-### Test Categories
+### Layout Rules
 
-- **Unit Tests** (`test/modbus.test.ts`) - Core protocol functionality, CRC/LRC calculations, frame building
-- **Fuzzing Tests** (`test/modbus-fuzzing.test.ts`) - Property-based testing with random frame generation
-- **Timing Tests** (`test/modbus-timing.test.ts`) - Abort handling (replaces legacy internal timeout), race conditions, overlapping requests
-- **UI Tests** (`test/ui-parsing.test.ts`) - Input validation and parsing logic
+| Category | Example | Purpose |
+|----------|---------|---------|
+| Protocol unit | `src/frameParser.test.ts` | Exhaust normal + error branches for a single module |
+| Transport unit | `src/transport/transport.test.ts` | Connect / send / auto response / error flows |
+| UI component | `src/frontend/components/WritePanel.test.tsx` | Input validation & event handling |
+| UI hooks | `src/frontend/hooks/useSerial.test.tsx` | Serial state transitions & side‑effects |
+| Property / fuzz | `src/__tests__/modbus-fuzzing.test.ts` | Random frame robustness |
+| Integration | `src/__tests__/integration.test.ts` | RTU/ASCII + transport + parser end‑to‑end |
+| Resync / noise | `src/__tests__/modbus-resync.test.ts` | Noise, abort, buffer resynchronisation |
 
-### Coverage Requirements
+Legacy `test/` directory and synthetic “coverage push” suites were removed; meaningful edge cases were merged into their owning module tests.
 
-- **Statements**: 90% (currently 93.64%)
-- **Branches**: 85% (currently 87.96%)
-- **Lines**: 90% (currently 93.64%)
-- **Functions**: 90% (currently 100%)
+### Coverage Thresholds (vitest + v8)
 
-### Running Tests
+| Metric | Threshold |
+|--------|-----------|
+| Statements | 90% |
+| Branches   | 85% |
+| Lines      | 90% |
+| Functions  | 90% |
+
+`modbus.ts` / `transport.ts` are type‑only (no runtime); 0% there is acceptable or can be excluded via `coverage.exclude` if desired.
+
+### Commands
 
 ```bash
 # Run all tests
 pnpm test
 
-# Run tests with coverage report
+# With coverage
 pnpm test:coverage
 
-# Run tests in watch mode for development
+# Watch mode
 pnpm test:watch
 
-# Run specific test file
-pnpm test test/modbus.test.ts
+# Single file
+pnpm test src/frameParser.test.ts
 ```
 
-### Test Features
+### Notable Features
 
-- **Property-based testing** with fast-check for robust frame validation
-- **Fake timers** for deterministic timeout testing
-- **Frame fuzzing** with up to 200 random corrupted frames per test
-- **Buffer boundary testing** with frame chunking scenarios
-- **ASCII and RTU protocol coverage** including error paths
-- **Race condition prevention** testing for concurrent requests
+- fast-check property based fuzzing (frame corruption / randomisation)
+- AbortSignal driven cancellation & timeout path tests
+- Buffer resynchronisation after CRC/LRC failure (gap & partial frame scenarios)
+- Deterministic Web Serial mocks (`MockTransport`, `MockSerialPort`)
+- UI tests assert minimal side‑effects: value transformations & rendering only
 
-The test suite validates the pure function + transport integration: malformed frames, resynchronisation, abort-driven cancellations and overlapping request prevention in higher layers.
-
-The project includes a comprehensive CI pipeline that:
-- Tests across Node.js versions 18, 20, and 22
-- Uses pnpm dependency caching for faster builds
-- Generates and uploads coverage reports
-- Automatically uploads coverage data to Codecov (if configured)
+CI runs on Node 18 / 20 / 22 and uploads coverage to Codecov.
 
 ## Contributing
 
