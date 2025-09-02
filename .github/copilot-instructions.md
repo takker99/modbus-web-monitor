@@ -1,71 +1,54 @@
-# Copilot Instructions: Modbus Web Monitor
+## Copilot Instructions: Modbus Web Monitor
 
-Concise, project-specific guide (≈35–50 lines). Focus on how code actually works today.
+Concise, project-specific guide (≈40 lines). Reflects current pure function + transport architecture.
 
-## Architecture / Files
-- Browser-only (Web Serial API) + Preact + strict TypeScript, built with Vite.
-- Pattern: thin stateful classes + pure functions for protocol logic.
-  - `modbus.ts`: pending request gate (single in-flight), 3s timeout, polling loop, RTU buffer & resync, ASCII buffering, emits request/response/error.
-  - `frameBuilder.ts`: pure request frame builders (RTU & ASCII). Add new function codes here.
-  - `frameParser.ts`: CRC/LRC helpers, frame length logic, resync (`findFrameResyncPosition`), bit/register extractors.
-  - `functionCodes.ts`: type-safe FC sets, labels, predicate helpers (`isReadFunctionCode`, `isWriteFunctionCode`).
-  - `crc.ts` / `lrc.ts`: checksum pure functions.
-  - `serial.ts`: `SerialManager` wraps Web Serial + generic `EventEmitter`.
-  - `App.tsx`: single UI; keeps last 100 logs & responses; persists polling interval in `localStorage('modbus-polling-interval')`.
+### Architecture & Key Files
+- Browser-only Preact + strict TS (Vite). No server code.
+- Pure function Modbus API split by protocol: `src/rtu.ts`, `src/ascii.ts` (build frames, send via transport, await single response, parse, return `Result`).
+- Framing / parsing primitives: `frameBuilder.ts`, `frameParser.ts`, `crc.ts`, `lrc.ts`, `functionCodes.ts`, `errors.ts`.
+- Transport abstraction (`src/transport/*`): `SerialTransport`, `MockTransport`, `TcpTransport` (placeholder). Unified event interface (`open`, `close`, `statechange`, `message`, `error`).
+- UI entry: `src/frontend/main.tsx` -> `App.tsx` (single component; manages hex toggle, logs (trim to 100), monitoring loop, localStorage for polling interval).
+- Legacy class client removed: do NOT reintroduce stateful request gate; each call is independent; caller controls concurrency.
 
-## Critical Behaviors
-- Concurrency guard: second read/write while `#pendingRequest` → `ModbusBusyError`.
-- Frame acceptance: slaveId + functionCode (or exception `fc|0x80`) must match pending request.
-- RTU resync: on CRC failure scan with `findFrameResyncPosition`; if none, drop buffer.
-- ASCII: accumulate `:...\r\n`; invalid/LRC mismatch → discard whole frame; buffer cleared for desync.
-- Polling: `startMonitoring` sequentially awaits `read`; errors emit but loop continues.
-- Multi-write limits: coils ≤1968, registers ≤123 (validated in UI parsing helpers).
+### Critical Behaviors / Constraints
+- One logical Modbus operation per function; no hidden retries; caller may wrap with polling or timeout (AbortSignal supported in every op via last options arg).
+- Result pattern: uses `option-t/plain_result` (`createOk/createErr`, `isOk/isErr`) instead of throwing; only truly unexpected internal bugs should throw.
+- Frame limits: multi-coil write ≤1968 bits; multi-register write ≤123 (validate before building).
+- RTU resync: on CRC failure parser scans for plausible next frame start; ASCII discards entire `:...\r\n` on LRC or format error.
+- Exception frames (fc | 0x80) converted to `ModbusExceptionError` with original code & exception byte.
 
-## Event Flow
-`SerialManager` data → `ModbusClient.handleResponse()` → parse → `response` event → UI state update. Requests: `ModbusClient.emit('request')` → UI sends via `serialManager.send()`.
+### Typical Flow (Read Holding Registers RTU)
+1. Caller invokes `readHoldingRegisters(transport, slaveId, start, qty, { signal })`.
+2. Function builds request via `frameBuilder` → writes raw bytes with `transport.postMessage`.
+3. Awaits first matching response frame (slave + fc or exception) from `message` events (internal mini listener) then parses via `frameParser`.
+4. Returns `Ok({ data, raw })` or `Err(error)`.
 
-## Testing (Vitest + fast-check)
-- Location: `test/*.test.ts` (CRC/LRC, builder, parser, resync, timing, ASCII edges, fuzzing, UI parse).
-- Add round‑trip (build→parse) tests for new function codes.
-- Commands: `pnpm test`, coverage `pnpm test:coverage`, watch `pnpm test:watch`, single file `pnpm test test/frameBuilder.test.ts`.
+### Adding a Function Code
+1. Extend types/predicates & label in `functionCodes.ts`.
+2. Add build logic in `frameBuilder.ts` (RTU & ASCII branches) + parse length & data extraction in `frameParser.ts`.
+3. Add high-level helper in `rtu.ts` / `ascii.ts` mirroring existing naming (e.g. `readX`, `writeY`).
+4. Tests: round‑trip (build→parse), exception path, CRC/LRC failure, fuzz (see existing patterns), and UI parse if formatting differs.
 
-## Scripts
-```bash
-pnpm dev   # Dev server
-pnpm fix   # Biome + tsgo (run & ensure clean before committing large refactors)
-pnpm check # Lint + type
-pnpm build # Production build
-```
-Note: always use explicit `.ts` extensions in imports.
+### Adding a Transport
+1. Implement class extending base interface in `src/transport` (see `serial-transport.ts`, `mock-transport.ts`).
+2. Emit required events; buffer assembly responsibility stays inside the transport (only raw bytes emitted). No protocol parsing here.
+3. Register in factory (`createTransport`) & add tests (connect lifecycle, message pass-through, error propagation).
 
-## Usage Examples
-```ts
-await modbusClient.read({ slaveId:1, functionCode:3, startAddress:0, quantity:10 });
-await modbusClient.write({ slaveId:1, functionCode:16, address:0x0100, value:[0x1234,0x5678] });
-```
+### Testing (Vitest + fast-check)
+- All tests under `test/`. Includes fuzzing (`modbus-fuzzing.test.ts`), resync, ASCII/RTU parity, UI parse, transport behaviors.
+- Commands: `pnpm test`, `pnpm test:coverage`, `pnpm test:watch`, single file `pnpm test test/frameBuilder.test.ts`.
 
-## Extension Checklist (New Function Code)
-1. Add type + label + predicates in `functionCodes.ts`.
-2. Add build branch (RTU & ASCII) in `frameBuilder.ts`.
-3. Add parse length/data extraction in `frameParser.ts`.
-4. UI auto-label works via `functionCodeLabel`; only tweak `App.tsx` if special formatting needed.
-5. Add tests (normal + exception + CRC/LRC failure + fuzz case).
+### Scripts / Tooling
+`pnpm dev` (Vite) | `pnpm build` | `pnpm preview` | `pnpm check` (lint+type) | `pnpm fix` (auto-fix) . Always use explicit `.ts` extensions; pnpm only (keep `pnpm-lock.yaml`).
 
-## Commit & Workflow Rules
-- Conventional Commits (English) e.g. `feat: add FC17 support` / `fix: correct CRC edge handling`.
-- Run `pnpm fix` (must be clean) before committing.
-- Split changes into logical commits (protocol refactor, UI tweak, test add) — avoid one giant commit.
+### Do / Don't
+Do: keep functions pure (no hidden mutable state), return `Result`, add exhaustive tests with edge & exception cases, respect frame size limits, add JSDoc, reuse existing helpers instead of duplicating logic.
+Don't: add class client wrappers, mutate shared module state, bypass transport events, throw for normal protocol errors, introduce React/Redux, commit `package-lock.json`.
 
-## Do NOT
-- Use npm / create or commit `package-lock.json` (pnpm only; keep `pnpm-lock.yaml`).
-- Add React / class components / Redux.
-- Bypass `SerialManager` to touch `SerialPort` directly.
-- Launch parallel reads/writes while pending.
-- Omit `.ts` extensions or add ESLint/Prettier configs.
-- Hardcode magic numbers (use existing constants/types for FC, limits).
+### Security & Browser Assumptions
+Web Serial requires user gesture; never auto-open. Firefox/Safari unsupported (no polyfills). Data stays local.
 
-## Security / Browser Assumptions
-- Web Serial requires explicit user gesture; never auto-select a port.
-- Firefox/Safari unsupported; UI already warns — no extra fallbacks.
+### Commit Conventions
+Conventional Commits (English). Separate protocol, transport, UI, and test changes. Ensure `pnpm fix` & `pnpm check` pass before pushing.
 
-Request clarifications or missing scenarios and this guide can be amended.
+Questions or edge cases not covered? Ask for clarification before introducing new architectural patterns.
