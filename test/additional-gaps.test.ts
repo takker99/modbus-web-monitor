@@ -25,9 +25,7 @@ describe("MockTransport uncovered branches", () => {
 
   it("disconnect no-op when already disconnected", async () => {
     const mt = new MockTransport({ type: "mock" });
-    {
-      await using _ = mt;
-    }
+    await mt.disconnect();
     expect(mt.connected).toBe(false);
   });
 
