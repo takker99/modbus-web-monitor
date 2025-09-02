@@ -16,6 +16,7 @@ import {
   parseRegisterData,
   validateASCIIFrame,
 } from "./frameParser.ts";
+import { isRegisterBasedFunctionCode } from "./functionCodes.ts";
 import type {
   ModbusResponse,
   ReadRequest,
@@ -162,16 +163,9 @@ export async function read(
     );
     if (isErr(responseResult)) return responseResult;
     const responseData = unwrapOk(responseResult);
-    let data: number[] = [];
-    if (request.functionCode === 3 || request.functionCode === 4) {
-      const full = Array.from(responseData);
-      const regBytes = full.slice(2); // skip slaveId, functionCode
-      data = parseRegisterData(regBytes);
-    } else if (request.functionCode === 1 || request.functionCode === 2) {
-      const full = Array.from(responseData);
-      const bitBytes = full.slice(2);
-      data = parseBitData(bitBytes, request.quantity);
-    }
+    const data = isRegisterBasedFunctionCode(request.functionCode)
+      ? parseRegisterData(Array.from(responseData).slice(2))
+      : parseBitData(Array.from(responseData).slice(2), request.quantity);
     const response: ModbusResponse = {
       address: request.address,
       data,
@@ -232,8 +226,13 @@ async function send(
     }
     const abortHandler = () => {
       cleanup();
-      const r = signal?.reason;
-      resolve(createErr(r instanceof Error ? r : new Error("Aborted")));
+      resolve(
+        createErr(
+          signal?.reason instanceof Error
+            ? signal.reason
+            : new Error("Aborted"),
+        ),
+      );
     };
     let asciiBuffer = "";
     const onMessage = (ev: Event) => {

@@ -16,6 +16,7 @@ import {
   parseRegisterResponse,
   validateRTUFrame,
 } from "./frameParser.ts";
+import { isRegisterBasedFunctionCode } from "./functionCodes.ts";
 import type {
   ModbusResponse,
   ReadRequest,
@@ -162,14 +163,11 @@ export async function read(
     );
     if (isErr(responseResult)) return responseResult;
     const responseData = unwrapOk(responseResult);
-    let data: number[] = [];
-    if (request.functionCode === 3 || request.functionCode === 4) {
-      const dataLength = responseData[2];
-      data = parseRegisterResponse(Array.from(responseData), dataLength);
-    } else if (request.functionCode === 1 || request.functionCode === 2) {
-      const dataLength = responseData[2];
-      data = parseBitResponse(Array.from(responseData), dataLength);
-    }
+    const data: number[] = (
+      isRegisterBasedFunctionCode(request.functionCode)
+        ? parseRegisterResponse
+        : parseBitResponse
+    )(Array.from(responseData), responseData[2]);
     const response: ModbusResponse = {
       address: request.address,
       data,
@@ -229,9 +227,12 @@ async function send(
     }
     const abortHandler = () => {
       cleanup();
-      const reason = signal && (signal as AbortSignal).reason;
       resolve(
-        createErr(reason instanceof Error ? reason : new Error("Aborted")),
+        createErr(
+          signal?.reason instanceof Error
+            ? signal.reason
+            : new Error("Aborted"),
+        ),
       );
     };
     const buffer: number[] = [];
